@@ -32,34 +32,7 @@
     <div id="modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in"></div>
   </div>
 
-  <!-- Login overlay -->
-  <div id="login-overlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 p-4">
-    <div class="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-8 fade-in">
-      <div class="w-12 h-12 rounded-xl bg-[#1a73e8] flex items-center justify-center text-white mb-5">
-        <span class="w-6 h-6" id="icon-login-logo"></span>
-      </div>
-      <h1 class="font-display text-xl font-medium text-slate-900 mb-1">Classroom Admin</h1>
-      <p class="text-sm text-slate-500 mb-6">Sign in to manage your organization.</p>
-      <form id="login-form" novalidate>
-        <label class="block text-xs font-medium text-slate-500 mb-1" for="login-password">Admin password</label>
-        <div class="relative mb-2">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" id="icon-login-lock"></span>
-          <input id="login-password" type="password" required autocomplete="current-password" placeholder="Enter password"
-            class="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent">
-        </div>
-        <p id="login-error" class="hidden text-xs text-red-600 mb-3 flex items-center gap-1.5">
-          <span class="w-3.5 h-3.5 shrink-0" id="icon-login-error"></span>
-          <span id="login-error-text"></span>
-        </p>
-        <button id="login-submit" type="submit" class="w-full bg-[#1a73e8] hover:bg-blue-700 text-white text-sm font-medium rounded-lg py-2.5 transition flex items-center justify-center gap-2">
-          <span>Sign in</span>
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <!-- App shell (hidden until authenticated) -->
-  <div id="app-shell" class="hidden">
+  <!-- Login overlay removed: single-user dashboard, no auth gate -->
 
   <!-- Header -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
@@ -73,15 +46,10 @@
           <p class="text-xs text-slate-500 leading-tight">Workspace directory &amp; course management</p>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <nav class="flex gap-1 bg-slate-100 rounded-full p-1 text-sm font-medium">
-          <button data-tab="ou" class="tab-btn px-4 py-1.5 rounded-full transition"></button>
-          <button data-tab="classroom" class="tab-btn px-4 py-1.5 rounded-full transition"></button>
-        </nav>
-        <button id="btn-logout" title="Log out" class="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-300 text-slate-500 hover:bg-slate-50 hover:text-red-600 hover:border-red-200 transition">
-          <span class="w-4 h-4" id="icon-logout"></span>
-        </button>
-      </div>
+      <nav class="flex gap-1 bg-slate-100 rounded-full p-1 text-sm font-medium">
+        <button data-tab="ou" class="tab-btn px-4 py-1.5 rounded-full transition"></button>
+        <button data-tab="classroom" class="tab-btn px-4 py-1.5 rounded-full transition"></button>
+      </nav>
     </div>
   </header>
 
@@ -211,13 +179,11 @@
 
   </main>
 
-  </div><!-- /#app-shell -->
-
 <script>
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbxMS0DLVnfxK9vcE19KzsrUEC7goaRmabNsaFYd0-I8Bio4Yud2Wp9xRwQpdSMhwPI/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwOVGz0K530rfKj_sPJOfbDKx9aNkgjIKUFjPq8RsVCYescqQaTjTi1GWbGLYFJJJdk/exec";
 
 /* ============================================================
    ICONS — raw inline SVG, no external icon libraries
@@ -237,9 +203,6 @@ const ICONS = {
   checkCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="8 12 11 15 16 9"></polyline></svg>`,
   alertCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>`,
   refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v6h6"></path><path d="M20 20v-6h-6"></path><path d="M5 15a8 8 0 0 0 14 3l1-1"></path><path d="M19 9a8 8 0 0 0-14-3L4 7"></path></svg>`,
-  lock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>`,
-  logout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"></path><polyline points="14 15 19 10 14 5"></polyline><line x1="19" y1="10" x2="8" y2="10"></line></svg>`,
-  warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2L12 3z"></path><line x1="12" y1="10" x2="12" y2="14"></line><line x1="12" y1="17" x2="12" y2="17.01"></line></svg>`,
 };
 function icon(el, name, extraClass) {
   if (!el) return;
@@ -251,10 +214,7 @@ function icon(el, name, extraClass) {
 /* ============================================================
    STATE
    ============================================================ */
-const SESSION_KEY = 'classroomAdmin.sessionToken';
-
 const state = {
-  token: null,
   activeTab: 'ou',
   ous: [],
   selectedOU: '',
@@ -320,113 +280,34 @@ function showToast(message, type = 'success') {
 
 /* ============================================================
    API LAYER
-   Notes:
-   - POST requests use Content-Type: text/plain;charset=utf-8. Apps Script's
-     web app endpoint doesn't implement doOptions(), so a POST sent with
-     'application/json' triggers a CORS preflight (OPTIONS) that Apps Script
-     can't answer, producing "TypeError: NetworkError when attempting to
-     fetch resource". text/plain is a CORS "simple" content type, so the
-     browser sends the POST directly with no preflight. The JSON payload is
-     still sent as a JSON string in the body; Code.gs parses it manually via
-     JSON.parse(e.postData.contents).
-   - Every request (after login) carries the session token, verified
-     server-side against a cache entry created at login.
+   Note: POST requests use Content-Type: text/plain;charset=utf-8. Apps
+   Script's web app endpoint doesn't implement doOptions(), so a POST sent
+   with 'application/json' triggers a CORS preflight (OPTIONS) that Apps
+   Script can't answer, producing "TypeError: NetworkError when attempting
+   to fetch resource". text/plain is a CORS "simple" content type, so the
+   browser sends the POST directly with no preflight. The JSON payload is
+   still sent as a JSON string in the body; Code.gs parses it manually via
+   JSON.parse(e.postData.contents).
    ============================================================ */
 async function apiGet(params) {
   const url = new URL(API_URL);
-  Object.entries({ ...params, token: state.token || '' }).forEach(([k, v]) => url.searchParams.set(k, v));
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString(), { method: 'GET' });
   if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
   const data = await res.json();
-  handleAuthFailure(data);
   if (data && data.success === false) throw new Error(data.error || 'Request failed');
   return data;
 }
 async function apiPost(body) {
-  const payload = { ...body, token: state.token || '' };
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
   const data = await res.json();
-  handleAuthFailure(data);
   if (data && data.success === false) throw new Error(data.error || 'Request failed');
   return data;
-}
-function handleAuthFailure(data) {
-  if (data && data.unauthorized) {
-    logoutLocally();
-    showToast(data.error || 'Session expired. Please log in again.', 'error');
-    throw new Error(data.error || 'Session expired. Please log in again.');
-  }
-}
-
-/* ============================================================
-   AUTH
-   ============================================================ */
-function showLoginScreen() {
-  document.getElementById('login-overlay').classList.remove('hidden');
-  document.getElementById('app-shell').classList.add('hidden');
-  setTimeout(() => document.getElementById('login-password')?.focus(), 50);
-}
-function showAppShell() {
-  document.getElementById('login-overlay').classList.add('hidden');
-  document.getElementById('app-shell').classList.remove('hidden');
-}
-function logoutLocally() {
-  state.token = null;
-  sessionStorage.removeItem(SESSION_KEY);
-  showLoginScreen();
-}
-async function handleLoginSubmit(e) {
-  e.preventDefault();
-  const passwordInput = document.getElementById('login-password');
-  const errorEl = document.getElementById('login-error');
-  const errorText = document.getElementById('login-error-text');
-  const btn = document.getElementById('login-submit');
-  const password = passwordInput.value;
-  if (!password) { passwordInput.focus(); return; }
-  errorEl.classList.add('hidden');
-  setButtonLoading(btn, 'Signing in…');
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'login', password }),
-    });
-    if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
-    const data = await res.json();
-    if (!data || data.success === false) throw new Error((data && data.error) || 'Incorrect password.');
-    state.token = data.token;
-    sessionStorage.setItem(SESSION_KEY, data.token);
-    passwordInput.value = '';
-    showAppShell();
-    startDashboard();
-  } catch (err) {
-    icon(document.getElementById('icon-login-error'), 'warning');
-    errorText.textContent = err.message || 'Unable to sign in. Please try again.';
-    errorEl.classList.remove('hidden');
-  } finally {
-    resetButtonLoading(btn, 'Sign in');
-  }
-}
-async function handleLogoutClick() {
-  const token = state.token;
-  logoutLocally();
-  showToast('Signed out.', 'success');
-  if (token) {
-    try {
-      await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'logout', token }),
-      });
-    } catch (err) {
-      // Best-effort server-side cleanup; local session is already cleared.
-    }
-  }
 }
 
 /* ============================================================
@@ -803,12 +684,7 @@ function resetButtonLoading(btn, label) {
 /* ============================================================
    WIRE UP
    ============================================================ */
-let dashboardStarted = false;
-
-function startDashboard() {
-  if (dashboardStarted) return; // avoid re-attaching listeners / re-fetching on repeat logins
-  dashboardStarted = true;
-
+function init() {
   // header icons
   icon(document.getElementById('icon-logo'), 'logo');
   document.querySelectorAll('.tab-btn')[0].textContent = 'OU & Students';
@@ -826,14 +702,11 @@ function startDashboard() {
   icon(document.getElementById('icon-students-header'), 'users');
   icon(document.getElementById('icon-spinner-teachers'), 'spinner');
   icon(document.getElementById('icon-spinner-students'), 'spinner');
-  icon(document.getElementById('icon-logout'), 'logout');
 
   setActiveTab('ou');
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
   });
-
-  document.getElementById('btn-logout').addEventListener('click', handleLogoutClick);
 
   // Tab 1 events
   document.getElementById('ou-select').addEventListener('change', (e) => {
@@ -874,24 +747,6 @@ function startDashboard() {
   document.getElementById('btn-open-add-student').addEventListener('click', openAddStudentModal);
 
   fetchOUs();
-}
-
-function init() {
-  icon(document.getElementById('icon-login-logo'), 'logo');
-  icon(document.getElementById('icon-login-lock'), 'lock');
-  document.getElementById('login-form').addEventListener('submit', handleLoginSubmit);
-
-  const savedToken = sessionStorage.getItem(SESSION_KEY);
-  if (savedToken) {
-    // Optimistically trust the cached token; if it has actually expired
-    // server-side, the first real API call will return `unauthorized`
-    // and handleAuthFailure() will bounce back to the login screen.
-    state.token = savedToken;
-    showAppShell();
-    startDashboard();
-  } else {
-    showLoginScreen();
-  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
