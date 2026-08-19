@@ -221,7 +221,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbwTDJU-lBlxl25sWK-cGNIqA5_yXGWJuff707SF7lyjTzC3OaouhWm3venyLp07DYBA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwBH0ijvAWpSEHVLiuOD1tIJoWkNaPHNX746u2aidlJgrtC0smm8QmiCogYpw4jGnAq/exec";
 
 /* ============================================================
    ICONS — raw inline SVG, no external icon libraries
@@ -504,11 +504,11 @@ function updateSelectionBar() {
 /* ============================================================
    TAB 2: CLASSROOM & MEMBER INSPECTOR
    ============================================================ */
-async function fetchCourses() {
+async function fetchCourses(forceRefresh) {
   state.loadingCourses = true;
   document.getElementById('courses-loading').classList.remove('hidden');
   try {
-    const data = await apiGet({ action: 'getCourses' });
+    const data = await apiGet({ action: 'getCourses', refresh: forceRefresh ? '1' : '0' });
     const courses = data.courses || (Array.isArray(data) ? data : []) || [];
     state.courses = courses;
     applyCourseFilter();
@@ -957,7 +957,7 @@ function init() {
     state.courseSearchQuery = e.target.value;
     applyCourseFilter();
   });
-  document.getElementById('btn-refresh-courses').addEventListener('click', fetchCourses);
+  document.getElementById('btn-refresh-courses').addEventListener('click', () => fetchCourses(true));
 
   fetchOUs();
   fetchCourses();
