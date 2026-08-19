@@ -19,6 +19,12 @@
   @keyframes fadeIn { from { opacity:0; transform: translateY(-4px);} to {opacity:1; transform:translateY(0);} }
   .toast-in { animation: toastIn .25s cubic-bezier(.34,1.56,.64,1); }
   @keyframes toastIn { from { opacity:0; transform: translateX(24px);} to {opacity:1; transform:translateX(0);} }
+  /* UnoCSS's runtime generates utility CSS in the order classes are first
+     encountered, not a fixed cascade — so an element carrying both
+     "hidden" and "flex" (toggled via JS) can end up with display:flex
+     winning over display:none depending on generation order. Forcing
+     .hidden here guarantees it always wins, regardless of that order. */
+  .hidden { display: none !important; }
   [v-cloak] { display:none; }
 </style>
 </head>
