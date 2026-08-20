@@ -21,10 +21,16 @@
   @keyframes toastIn { from { opacity:0; transform: translateX(24px);} to {opacity:1; transform:translateX(0);} }
   /* UnoCSS's runtime generates utility CSS in the order classes are first
      encountered, not a fixed cascade — so an element carrying both
-     "hidden" and "flex" (toggled via JS) can end up with display:flex
-     winning over display:none depending on generation order. Forcing
-     .hidden here guarantees it always wins, regardless of that order. */
-  .hidden { display: none !important; }
+     "hidden" and "flex" as STATIC classes (toggled via JS, e.g. modal
+     backdrops and loading overlays) can end up with display:flex winning
+     over display:none depending on generation order. This rule forces
+     that specific combination to always resolve to hidden.
+     IMPORTANT: this is scoped to .hidden.flex / .hidden.grid only — a
+     blanket ".hidden { display:none!important }" would also break
+     responsive patterns like class="hidden md:flex" (used by the sidebar
+     nav), since !important would override the md:flex media-query rule
+     at every screen size, not just permit the base "hidden" state. */
+  .hidden.flex, .hidden.grid { display: none !important; }
   [v-cloak] { display:none; }
   .g-card { background:#fff; border:1px solid #dadce0; border-radius:12px; box-shadow: 0 1px 2px 0 rgba(60,64,67,.08), 0 1px 3px 1px rgba(60,64,67,.04); }
   .nav-link { color:#5f6368; }
@@ -202,6 +208,15 @@
                 <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
               </button>
             </div>
+            <div class="grid grid-cols-[auto_1fr] items-center gap-2">
+              <label for="course-ou-filter" class="text-xs font-medium text-[#5f6368] whitespace-nowrap">Scan teachers from</label>
+              <div class="relative min-w-0">
+                <select id="course-ou-filter" class="w-full appearance-none border border-[#dadce0] rounded-lg pl-3 pr-8 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent transition-shadow">
+                  <option value="">Entire domain (default)</option>
+                </select>
+                <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#80868b]" id="course-ou-filter-chevron"></div>
+              </div>
+            </div>
           </div>
           <ul id="courses-list" class="divide-y divide-[#f1f3f4] max-h-80 overflow-y-auto">
             <li class="px-4 py-10 text-center text-[#80868b] text-sm">Loading classrooms…</li>
@@ -254,7 +269,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbwBtoubeUCJUYn8hWKcZ2gIp29KTLXSAvbdO3N6n3i8ERPznMr6UP7v4P5OJfx-8ekS/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbw1YdqNqG5rgwcbfPYEShrtIDK-jLfFjlEwOI6MGMJ2CSPsYWZtn3WS2_DBkCbTXca8/exec";
 
 /* ============================================================
    ICONS — raw inline SVG, no external icon libraries
@@ -302,6 +317,7 @@ const state = {
   filteredCourses: [],
   courseSearchQuery: '',
   loadingCourses: false,
+  courseOuFilter: '',
   teachers: [],
   students: [],
   loadingMembers: false,
@@ -458,11 +474,28 @@ async function fetchOUs() {
         }).join('');
     }
     select.disabled = false;
+    populateCourseOuFilter();
   } catch (err) {
     select.innerHTML = `<option value="">Failed to load OUs</option>`;
     showToast(err.message || 'Failed to load organizational units', 'error');
   } finally {
     state.loadingOUs = false;
+  }
+}
+
+function populateCourseOuFilter() {
+  const filterSelect = document.getElementById('course-ou-filter');
+  if (!filterSelect) return;
+  const previousValue = filterSelect.value;
+  filterSelect.innerHTML = `<option value="">Entire domain (default)</option>` +
+    state.ous.map(ou => {
+      const path = ou.orgUnitPath || ou.path || '';
+      const name = ou.name || path;
+      return `<option value="${escapeHtml(path)}">${escapeHtml(name)}</option>`;
+    }).join('');
+  // Preserve the admin's selection across refreshes, if it still exists.
+  if (previousValue && state.ous.some(ou => (ou.orgUnitPath || ou.path) === previousValue)) {
+    filterSelect.value = previousValue;
   }
 }
 
@@ -560,7 +593,9 @@ async function fetchCourses(forceRefresh) {
   state.loadingCourses = true;
   document.getElementById('courses-loading').classList.remove('hidden');
   try {
-    const data = await apiGet({ action: 'getCourses', refresh: forceRefresh ? '1' : '0' }, 100000);
+    const params = { action: 'getCourses', refresh: forceRefresh ? '1' : '0' };
+    if (state.courseOuFilter) params.teacherOuPath = state.courseOuFilter;
+    const data = await apiGet(params, 100000);
     const courses = data.courses || (Array.isArray(data) ? data : []) || [];
     state.courses = courses;
     applyCourseFilter();
@@ -960,6 +995,7 @@ function init() {
   icon(document.getElementById('icon-courses-header'), 'book');
   icon(document.getElementById('icon-search-courses'), 'search');
   icon(document.getElementById('icon-refresh-courses'), 'refresh');
+  icon(document.getElementById('course-ou-filter-chevron'), 'chevronDown');
   icon(document.getElementById('icon-spinner-courses'), 'spinner');
   icon(document.getElementById('icon-enroll-ou'), 'building');
 
@@ -1011,6 +1047,10 @@ function init() {
     applyCourseFilter();
   });
   document.getElementById('btn-refresh-courses').addEventListener('click', () => fetchCourses(true));
+  document.getElementById('course-ou-filter').addEventListener('change', (e) => {
+    state.courseOuFilter = e.target.value;
+    fetchCourses(true); // OU changed, so bypass the cache and rescan with the new scope
+  });
 
   fetchOUs();
   fetchCourses();
