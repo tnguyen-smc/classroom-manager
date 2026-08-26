@@ -588,8 +588,12 @@
                     <h2 id="workspace-course-name" class="text-base font-bold truncate">—</h2>
                     <p id="workspace-course-id" class="text-xs text-[var(--ink-faint)] font-mono leading-tight">—</p>
                     <p id="workspace-course-dates" class="text-xs text-[var(--ink-faint)] mt-0.5">Created — &middot; Last active —</p>
+                    <p id="workspace-course-owner" class="text-xs mt-0.5 hidden"></p>
                   </div>
                   <div class="flex gap-2 shrink-0">
+                    <button id="btn-refresh-course-members" title="Refresh teachers &amp; students" class="btn-icon-neutral h-9 w-9 flex items-center justify-center rounded-lg focus-ring">
+                      <span class="w-4 h-4 block" id="icon-refresh-course-members"></span>
+                    </button>
                     <button id="btn-export-grades" class="btn-ghost h-9 px-3 rounded-lg text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
                       <span class="w-3.5 h-3.5" id="icon-export-grades"></span> Export grades
                     </button>
@@ -747,7 +751,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycby5TMIPEPA5C1FSGPAIVmg6c9mTFxDAnF1d4U0V4g6tArap2KT7Sa7zdinga-w32_1r/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbw5cO4R-8vDUlk_6mJYCElgoEITaNXB1PMD7nF7Ae3RENAwrOxr3Kf0xxAevFwn7QKE/exec";
 const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
@@ -850,6 +854,23 @@ function getCourseId(c) { return c?.id || c?.courseId || ''; }
 function getCourseName(c) { return c?.name || c?.courseName || getCourseId(c); }
 function getCourseSection(c) { return c?.section || c?.descriptionHeading || ''; }
 function isOwnerInactive(c) { return c?.ownerInactive === true; }
+/**
+ * True if the course owner is outside the configured Staff OU — e.g. a
+ * parish staff member (their own OU) creating a confirmation-class
+ * classroom — or couldn't be resolved against this Workspace directory at
+ * all (a fully external/cross-domain account). Returns false rather than
+ * guessing if no Staff OU is configured, since there's nothing to compare
+ * against.
+ */
+function isOwnerOutsideStaffOu(c) {
+  const staffOU = (state.appSettings && state.appSettings.staffOU) || '';
+  if (!staffOU) return false;
+  if (c?.ownerFound === false) return true;
+  const path = c?.ownerOuPath || '';
+  if (!path) return false;
+  const base = staffOU.replace(/\/$/, '');
+  return !(path === base || path.indexOf(base + '/') === 0);
+}
 function getOwnerEmail(c) { return c?.ownerEmail || c?.teacherEmail || ''; }
 function getClassGroupLabel(orgUnitPath) {
   const m = state.ouMappings.find(x => x.orgUnitPath === orgUnitPath);
@@ -1307,7 +1328,7 @@ function renderCourses() {
           <input type="checkbox" class="course-checkbox role-write rounded border-[var(--line)] mt-0.5 shrink-0" data-id="${escapeHtml(id)}" ${checked}>
           <div class="min-w-0 flex-1 course-open">
             <p class="text-sm font-medium truncate">${escapeHtml(name)}</p>
-            <p class="text-xs text-[var(--ink-faint)] truncate">${escapeHtml(section || id)} ${isOwnerInactive(c) ? `<span class="text-[var(--warn)]">· owner inactive</span>` : ''}</p>
+            <p class="text-xs text-[var(--ink-faint)] truncate">${escapeHtml(section || id)} ${isOwnerInactive(c) ? `<span class="text-[var(--warn)]">· owner inactive</span>` : ''} ${isOwnerOutsideStaffOu(c) ? `<span class="text-[var(--warn)]">· non-staff owner</span>` : ''}</p>
             <p class="text-[10px] text-[var(--ink-faint)] truncate mt-0.5">Created ${formatShortDate(c.creationTime)} &middot; Active ${formatShortDate(c.updateTime)}</p>
           </div>
         </div>
@@ -1370,23 +1391,34 @@ function showWorkspaceLoaded() {
   document.getElementById('workspace-loaded').classList.remove('hidden');
 }
 
-async function fetchCourseMembers(courseId) {
+async function fetchCourseMembers(courseId, forceRefresh) {
   showWorkspaceLoaded();
   const course = state.courses.find(c => getCourseId(c) === courseId);
   document.getElementById('workspace-course-name').textContent = course ? getCourseName(course) : courseId;
   document.getElementById('workspace-course-id').textContent = courseId;
   document.getElementById('workspace-course-dates').textContent =
     `Created ${formatShortDate(course?.creationTime)} \u00b7 Last active ${formatShortDate(course?.updateTime)}`;
+  const ownerEl = document.getElementById('workspace-course-owner');
+  if (course && course.ownerEmail) {
+    const outside = isOwnerOutsideStaffOu(course);
+    ownerEl.classList.remove('hidden');
+    ownerEl.innerHTML = `Owner: <span class="text-[var(--ink-soft)]">${escapeHtml(course.ownerEmail)}</span>` +
+      (outside ? ` <span class="text-[var(--warn)] font-medium">· non-staff owner${course.ownerOuPath ? ' (' + escapeHtml(course.ownerOuPath) + ')' : ''}</span>` : '');
+  } else {
+    ownerEl.classList.add('hidden');
+    ownerEl.innerHTML = '';
+  }
   document.getElementById('teachers-loading').classList.remove('hidden');
   document.getElementById('students-loading').classList.remove('hidden');
   ['btn-open-add-teacher','btn-open-add-student','btn-export-grades','btn-export-topics'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
   try {
-    const data = await apiGet({ action: 'getCourseMembers', courseId }, 60000);
+    const data = await apiGet({ action: 'getCourseMembers', courseId, refresh: forceRefresh ? '1' : '0' }, 60000);
     state.teachers = data.teachers || [];
     state.students = data.students || [];
     state.selectedStudentIds.clear();
     renderMembers();
     ['btn-open-add-teacher','btn-open-add-student','btn-export-grades','btn-export-topics'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+    if (forceRefresh) showToast('Teachers and students refreshed.', 'success');
   } catch (err) {
     state.teachers = []; state.students = [];
     renderMembers();
@@ -1547,7 +1579,7 @@ function openCreateCourseModal() {
 // preview, then hands the raw file to a bulkCreateCoursesFromFile action.
 function openBulkCreateModal() {
   openModal(modalShell('Bulk create classrooms', `
-    <p class="text-sm text-[var(--ink-soft)] mb-3">Upload an Excel/CSV file with columns for classroom name, section, room, primary teacher email, and student emails. Each row becomes one classroom.</p>
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Upload a CSV — one row per student: column A = classroom name, column B = primary teacher email, column C = student email. Repeat the classroom name and teacher email on every row for that classroom; rows sharing the same name become one classroom.</p>
     <label class="flex flex-col items-center justify-center gap-2 border border-dashed border-[var(--line)] rounded-lg py-8 cursor-pointer hover:border-[var(--ink-faint)] transition">
       <span class="w-6 h-6 text-[var(--ink-faint)]">${ICONS.upload}</span>
       <span class="text-sm text-[var(--ink-soft)]">Click to choose a .csv or .xlsx file</span>
@@ -1897,6 +1929,11 @@ async function loadSettingsData() {
     state.appUsers = usersData.users || [];
   } catch (err) { /* expected for non-admin roles */ }
   renderSettingsView();
+  // Staff OU (used to flag non-staff course owners in Manage Classrooms)
+  // lives in appSettings, which loads in parallel with the course list at
+  // boot — re-render the drawer so that badge doesn't just silently wait
+  // for the next unrelated re-render to appear.
+  if (state.courses.length) renderCourses();
 }
 function renderSettingsView() {
   populateOuDependentSelects();
@@ -1998,6 +2035,7 @@ function boot() {
   icon(document.getElementById('icon-spinner-students'), 'spinner');
   icon(document.getElementById('icon-search-courses'), 'search');
   icon(document.getElementById('icon-refresh-courses'), 'refresh');
+  icon(document.getElementById('icon-refresh-course-members'), 'refresh');
   icon(document.getElementById('course-sort-chevron'), 'chevronDown');
   icon(document.getElementById('icon-spinner-courses'), 'spinner');
   icon(document.getElementById('icon-drawer-toggle'), 'chevronLeft');
@@ -2114,6 +2152,7 @@ function boot() {
   document.getElementById('course-sort').value = state.courseSort;
   document.getElementById('course-sort').addEventListener('change', (e) => { state.courseSort = e.target.value; applyCourseFilter(); });
   document.getElementById('btn-refresh-drawer').addEventListener('click', () => fetchCourses(true));
+  document.getElementById('btn-refresh-course-members').addEventListener('click', () => { if (state.courseId) fetchCourseMembers(state.courseId, true); });
   document.getElementById('btn-bulk-archive').addEventListener('click', () => confirmBulkCourseOp('bulkArchiveCourses', 'Archive', 'Archive'));
   document.getElementById('btn-bulk-unarchive').addEventListener('click', () => confirmBulkCourseOp('bulkUnarchiveCourses', 'Unarchive', 'Unarchive'));
   document.getElementById('btn-bulk-delete').addEventListener('click', () => confirmBulkCourseOp('bulkDeleteCourses', 'Delete', 'Permanently delete'));
