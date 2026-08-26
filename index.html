@@ -751,7 +751,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbw5cO4R-8vDUlk_6mJYCElgoEITaNXB1PMD7nF7Ae3RENAwrOxr3Kf0xxAevFwn7QKE/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbx4ctm9y7KJD759707UH7e3XECxL5Q_UIhhLuz-Hu9d7Ol-OAmFgaIkNEwQhYT7ytj4/exec";
 const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
@@ -1363,8 +1363,21 @@ function confirmSingleCourseOp(courseId, action, title, body, submitLabel, submi
       await apiPost({ action, courseId });
       showToast(`${title} succeeded.`, 'success');
       closeModal();
-      if (state.courseId === courseId && action === 'deleteCourse') { state.courseId = ''; showWorkspaceEmpty(); }
-      fetchCourses(true);
+      // Patch the one changed course locally instead of forcing a full,
+      // live re-fetch of every course in the domain (which is what made
+      // this feel slow — the archive/delete call itself is quick; the
+      // subsequent full-list rebuild for a single-course change wasn't).
+      // The server-side cache was already invalidated, so a real reload
+      // still picks this up correctly either way.
+      if (action === 'deleteCourse') {
+        state.courses = state.courses.filter(c => getCourseId(c) !== courseId);
+        if (state.courseId === courseId) { state.courseId = ''; showWorkspaceEmpty(); }
+      } else {
+        const newState = action === 'archiveCourse' ? 'ARCHIVED' : 'ACTIVE';
+        state.courses = state.courses.map(c => getCourseId(c) === courseId ? Object.assign({}, c, { courseState: newState }) : c);
+      }
+      renderCourses();
+      loadOrgStats();
     } catch (err) {
       showToast(err.message || `${title} failed`, 'error');
       resetButtonLoading(btn, submitLabel);
@@ -1855,9 +1868,25 @@ function confirmBulkCourseOp(action, label, verb) {
     try {
       const data = await apiPost({ action, courseIds: ids }, 120000);
       closeModal();
-      showToast(`${verb} succeeded for ${data?.results?.ok?.length ?? ids.length} classroom(s).`, 'success');
+      const okIds = new Set(data?.results?.ok || ids);
+      showToast(`${verb} succeeded for ${okIds.size} classroom(s).`, 'success');
       state.selectedCourseIds.clear();
-      fetchCourses(true);
+      // Same fix as the single-course case, but this is the one that
+      // actually hurt: a bulk action on N courses used to trigger a full
+      // live re-fetch + owner-resolution pass over EVERY course in the
+      // domain afterward, on top of the N archive/delete calls themselves.
+      // Patching just the affected courses locally is what actually
+      // removes the wait — the archive/delete calls were never the slow
+      // part.
+      if (action === 'bulkDeleteCourses') {
+        state.courses = state.courses.filter(c => !okIds.has(getCourseId(c)));
+        if (okIds.has(state.courseId)) { state.courseId = ''; showWorkspaceEmpty(); }
+      } else {
+        const newState = action === 'bulkArchiveCourses' ? 'ARCHIVED' : 'ACTIVE';
+        state.courses = state.courses.map(c => okIds.has(getCourseId(c)) ? Object.assign({}, c, { courseState: newState }) : c);
+      }
+      renderCourses();
+      loadOrgStats();
     } catch (err) {
       showToast(err.message || `${verb} failed`, 'error');
       resetButtonLoading(btn, label);
