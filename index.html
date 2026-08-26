@@ -8,146 +8,162 @@
 <!-- UnoCSS runtime (Tailwind-compatible utility engine, no build step) -->
 <script src="https://cdn.jsdelivr.net/npm/@unocss/runtime/uno.global.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Google+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 
 <style>
-  html, body { font-family: 'Roboto', Arial, sans-serif; }
-  .font-display { font-family: 'Google Sans', 'Roboto', Arial, sans-serif; }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
-  .fade-in { animation: fadeIn .18s ease-out; }
-  @keyframes fadeIn { from { opacity:0; transform: translateY(-4px);} to {opacity:1; transform:translateY(0);} }
-  .toast-in { animation: toastIn .25s cubic-bezier(.34,1.56,.64,1); }
-  @keyframes toastIn { from { opacity:0; transform: translateX(24px);} to {opacity:1; transform:translateX(0);} }
-  /* UnoCSS's runtime generates utility CSS in the order classes are first
-     encountered, not a fixed cascade — so an element carrying both
-     "hidden" and "flex" as STATIC classes (toggled via JS, e.g. modal
-     backdrops and loading overlays) can end up with display:flex winning
-     over display:none depending on generation order. This rule forces
-     that specific combination to always resolve to hidden.
-     IMPORTANT: this is scoped to .hidden.flex / .hidden.grid only — a
-     blanket ".hidden { display:none!important }" would also break
-     responsive patterns like class="hidden md:flex" (used by the sidebar
-     nav), since !important would override the md:flex media-query rule
-     at every screen size, not just permit the base "hidden" state. */
-  .hidden.flex, .hidden.grid { display: none !important; }
-  [v-cloak] { display:none; }
-  .g-card { background:#fff; border:1px solid #dadce0; border-radius:12px; box-shadow: 0 1px 2px 0 rgba(60,64,67,.08), 0 1px 3px 1px rgba(60,64,67,.04); }
-  .nav-link { color:#5f6368; }
-  .nav-link:hover { background:#f1f3f4; color:#202124; }
-  .nav-link.is-active { background:#e8f0fe; color:#1967d2; }
-  .pill-btn { color:#5f6368; background:#f1f3f4; }
-  .pill-btn.is-active { background:#1a73e8; color:#fff; }
+  :root{
+    --ink:#12161c;
+    --ink-soft:#4a5261;
+    --ink-faint:#8890a0;
+    --line:#e3e6ec;
+    --paper:#f6f7fa;
+    --card:#ffffff;
+    --accent:#3452e1;
+    --accent-ink:#1f36b0;
+    --accent-tint:#eaeeff;
+    --good:#0f8a4f;
+    --good-tint:#e6f6ee;
+    --bad:#d7362f;
+    --bad-tint:#fdeceb;
+    --warn:#b5670a;
+    --warn-tint:#fdf1e0;
+  }
+  html,body{ font-family:'Inter',system-ui,Arial,sans-serif; color:var(--ink); }
+  .font-mono{ font-family:'IBM Plex Mono', ui-monospace, monospace; }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:#c7cbd6; border-radius:8px; }
+  .fade-in{ animation:fadeIn .16s ease-out; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);} }
+  .toast-in{ animation:toastIn .22s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes toastIn{ from{opacity:0; transform:translateX(24px);} to{opacity:1; transform:translateX(0);} }
+  /* UnoCSS generates utility CSS in first-seen order, not a fixed cascade — an
+     element carrying both "hidden" and "flex" as STATIC classes (toggled via JS,
+     e.g. modal backdrops / loading overlays) can end up with display:flex
+     winning depending on generation order. Force that exact combination to
+     resolve to hidden. Scoped to .hidden.flex/.hidden.grid only — a blanket
+     ".hidden{display:none!important}" would break responsive patterns like
+     class="hidden md:flex" (the sidebar nav) at every breakpoint. */
+  .hidden.flex,.hidden.grid{ display:none !important; }
+  [v-cloak]{ display:none; }
+  .surface{ background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:0 1px 2px rgba(18,22,28,.03); }
+  .nav-link{ color:var(--ink-soft); }
+  .nav-link:hover{ background:var(--paper); color:var(--ink); }
+  .nav-link.is-active{ background:var(--accent-tint); color:var(--accent-ink); }
+  .pill-btn{ color:var(--ink-soft); background:var(--paper); border:1px solid transparent; }
+  .pill-btn.is-active{ background:var(--ink); color:#fff; }
+  .focus-ring:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-ink); }
+  .stat-card{ background:var(--card); border:1px solid var(--line); border-radius:14px; }
 </style>
 </head>
-<body class="bg-[#f8f9fa] text-[#3c4043] min-h-screen">
+<body class="bg-[var(--paper)] text-[var(--ink)] min-h-screen">
 
   <!-- Toast container -->
   <div id="toast-container" class="fixed top-4 right-4 z-[80] flex flex-col gap-2 w-[92vw] max-w-sm"></div>
 
   <!-- Modal -->
-  <div id="modal-backdrop" class="hidden fixed inset-0 bg-[#202124]/40 z-70 flex items-center justify-center p-4">
+  <div id="modal-backdrop" class="hidden fixed inset-0 bg-[#12161c]/45 z-70 flex items-center justify-center p-4">
     <div id="modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in"></div>
   </div>
 
-  <!-- Login overlay removed: single-user dashboard, no auth gate -->
-
   <div class="flex min-h-screen">
     <!-- Sidebar (desktop/tablet) -->
-    <aside class="hidden md:flex md:flex-col w-60 bg-white border-r border-[#dadce0] shrink-0">
-      <div class="h-16 flex items-center gap-3 px-5 border-b border-[#dadce0]">
-        <div class="w-9 h-9 rounded-lg bg-[#1a73e8] flex items-center justify-center text-white shrink-0 shadow-sm shadow-[#1a73e8]/20">
-          <span class="w-5 h-5" id="icon-logo"></span>
+    <aside class="hidden md:flex md:flex-col w-60 bg-white border-r border-[var(--line)] shrink-0">
+      <div class="h-16 flex items-center gap-3 px-5 border-b border-[var(--line)]">
+        <div class="w-9 h-9 rounded-xl bg-[var(--ink)] flex items-center justify-center text-white shrink-0">
+          <span class="w-4.5 h-4.5" id="icon-logo"></span>
         </div>
         <div class="min-w-0">
-          <p class="font-display text-sm font-medium text-[#202124] leading-tight truncate">Classroom Admin</p>
-          <p class="text-xs text-[#5f6368] leading-tight truncate">Workspace console</p>
+          <p class="text-sm font-bold leading-tight truncate tracking-tight">Classroom Admin</p>
+          <p class="text-xs text-[var(--ink-faint)] leading-tight truncate">Workspace console</p>
         </div>
       </div>
       <nav class="flex-1 px-3 py-4 space-y-1">
-        <button data-tab="ou" class="tab-btn nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors">
+        <button data-tab="ou" class="tab-btn nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-ring">
           <span class="w-5 h-5 shrink-0" id="nav-icon-ou"></span><span>OU &amp; Students</span>
         </button>
-        <button data-tab="classroom" class="tab-btn nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors">
+        <button data-tab="classroom" class="tab-btn nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-ring">
           <span class="w-5 h-5 shrink-0" id="nav-icon-classroom"></span><span>Classrooms</span>
         </button>
       </nav>
-      <div class="px-5 py-4 border-t border-[#dadce0] text-xs text-[#5f6368]">Signed in as domain admin</div>
+      <div class="px-5 py-4 border-t border-[var(--line)] text-xs text-[var(--ink-faint)]">Signed in as domain admin</div>
     </aside>
 
     <div class="flex-1 min-w-0 flex flex-col">
       <!-- Mobile header (sidebar collapses on small screens) -->
-      <header class="md:hidden bg-white/95 backdrop-blur border-b border-[#dadce0] sticky top-0 z-30">
+      <header class="md:hidden bg-white/95 backdrop-blur border-b border-[var(--line)] sticky top-0 z-30">
         <div class="px-4 py-3 flex items-center gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[#1a73e8] flex items-center justify-center text-white shrink-0">
+          <div class="w-8 h-8 rounded-lg bg-[var(--ink)] flex items-center justify-center text-white shrink-0">
             <span class="w-4 h-4" id="icon-logo-mobile"></span>
           </div>
-          <h1 class="font-display text-base font-medium text-[#202124] flex-1 truncate">Classroom Admin</h1>
+          <h1 class="text-base font-bold flex-1 truncate tracking-tight">Classroom Admin</h1>
         </div>
         <div class="px-4 pb-3 flex gap-2">
-          <button data-tab="ou" class="tab-btn pill-btn flex-1 text-sm font-medium rounded-lg py-2 transition-colors">OU &amp; Students</button>
-          <button data-tab="classroom" class="tab-btn pill-btn flex-1 text-sm font-medium rounded-lg py-2 transition-colors">Classrooms</button>
+          <button data-tab="ou" class="tab-btn pill-btn flex-1 text-sm font-medium rounded-lg py-2 transition-colors focus-ring">OU &amp; Students</button>
+          <button data-tab="classroom" class="tab-btn pill-btn flex-1 text-sm font-medium rounded-lg py-2 transition-colors focus-ring">Classrooms</button>
         </div>
       </header>
 
-      <main class="flex-1 px-4 sm:px-6 lg:px-8 py-6 md:py-8 max-w-5xl w-full mx-auto">
+      <main class="flex-1 px-4 sm:px-6 lg:px-8 py-6 md:py-8 max-w-6xl w-full mx-auto">
 
     <!-- TAB 1: OU & Student Browser -->
     <section id="view-ou">
-      <div class="g-card p-4 sm:p-5 mb-4">
+      <div class="surface p-4 sm:p-5 mb-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-medium text-[#5f6368] mb-1">Organizational Unit</label>
+            <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Organizational Unit</label>
             <div class="grid grid-cols-[1fr_auto] gap-2">
               <div class="relative min-w-0">
-                <select id="ou-select" class="w-full appearance-none border border-[#dadce0] rounded-lg pl-3 pr-9 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent transition-shadow">
+                <select id="ou-select" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm bg-white focus-ring transition-shadow">
                   <option value="">Loading organizational units…</option>
                 </select>
-                <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#80868b]" id="ou-chevron"></div>
+                <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="ou-chevron"></div>
               </div>
-              <button id="btn-refresh-ous" title="Refresh OUs" class="h-9 w-9 flex items-center justify-center rounded-lg border border-[#dadce0] text-[#5f6368] hover:bg-[#f8f9fa] hover:border-[#80868b] active:scale-95 transition-all shrink-0">
+              <button id="btn-refresh-ous" title="Refresh OUs" class="h-9 w-9 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-95 transition-all shrink-0 focus-ring">
                 <span class="w-4 h-4 block" id="icon-refresh-ous"></span>
               </button>
             </div>
           </div>
           <div>
-            <label class="block text-xs font-medium text-[#5f6368] mb-1">Search roster</label>
+            <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Search roster</label>
             <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#80868b]" id="icon-search"></span>
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="icon-search"></span>
               <input id="user-search" type="text" placeholder="Filter by name or email…" disabled
-                class="w-full border border-[#dadce0] rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent disabled:bg-[#f8f9fa] disabled:text-[#80868b] transition-shadow">
+                class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring disabled:bg-[var(--paper)] disabled:text-[var(--ink-faint)] transition-shadow">
             </div>
           </div>
         </div>
 
-        <div id="selection-bar" class="hidden mt-4 flex flex-wrap items-center gap-3 bg-[#e8f0fe] border border-[#d2e3fc] rounded-lg px-3 py-2">
-          <span class="text-sm text-[#174ea6] font-medium"><span id="selected-count">0</span> student(s) selected</span>
-          <button id="btn-enroll-selected" class="ml-auto text-sm font-medium text-white bg-[#1a73e8] hover:bg-[#1765cc] active:scale-[0.98] transition-all rounded-lg px-3 py-1.5 flex items-center gap-1.5 shadow-sm shadow-[#1a73e8]/20">
+        <div id="selection-bar" class="hidden mt-4 flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[#c9d3fb] rounded-lg px-3 py-2">
+          <span class="text-sm text-[var(--accent-ink)] font-medium"><span id="selected-count">0</span> student(s) selected</span>
+          <button id="btn-enroll-selected" class="ml-auto text-sm font-medium text-white btn-primary active:scale-[0.98] transition-all rounded-lg px-3 py-1.5 flex items-center gap-1.5 focus-ring">
             <span class="w-3.5 h-3.5" id="icon-enroll-selected"></span> Enroll in course
           </button>
-          <button id="btn-clear-selection" class="text-sm font-medium text-[#1765cc] hover:text-[#174ea6] px-2 py-1.5">Clear</button>
+          <button id="btn-clear-selection" class="text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1.5 focus-ring">Clear</button>
         </div>
       </div>
 
-      <div class="g-card overflow-hidden">
+      <div class="surface overflow-hidden">
         <div class="relative">
           <div id="ou-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
-            <div class="flex items-center gap-2 text-[#5f6368] text-sm">
+            <div class="flex items-center gap-2 text-[var(--ink-soft)] text-sm">
               <span class="w-5 h-5 animate-spin" id="icon-spinner-users"></span> Loading roster…
             </div>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead>
-                <tr class="text-left text-xs text-[#5f6368] uppercase tracking-wide border-b border-[#dadce0]">
-                  <th class="px-4 py-3 w-10"><input type="checkbox" id="select-all" class="rounded border-[#dadce0]"></th>
+                <tr class="text-left text-xs text-[var(--ink-faint)] uppercase tracking-wide border-b border-[var(--line)]">
+                  <th class="px-4 py-3 w-10"><input type="checkbox" id="select-all" class="rounded border-[var(--line)]"></th>
                   <th class="px-4 py-3">Name</th>
                   <th class="px-4 py-3">Email</th>
                   <th class="px-4 py-3">Status</th>
                 </tr>
               </thead>
               <tbody id="user-table-body">
-                <tr><td colspan="4" class="px-4 py-10 text-center text-[#80868b] text-sm">Select an organizational unit to load its roster.</td></tr>
+                <tr><td colspan="4" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Select an organizational unit to load its roster.</td></tr>
               </tbody>
             </table>
           </div>
@@ -157,104 +173,121 @@
 
     <!-- TAB 2: Classroom & Member Inspector -->
     <section id="view-classroom" class="hidden">
-      <div class="g-card p-4 sm:p-5 mb-4 space-y-3">
+
+      <!-- Domain-wide classroom stats -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="stat-card p-4">
+          <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total classrooms</p>
+          <p id="stat-total-courses" class="text-2xl font-extrabold tracking-tight">—</p>
+        </div>
+        <div class="stat-card p-4">
+          <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Active classrooms</p>
+          <p id="stat-active-courses" class="text-2xl font-extrabold tracking-tight">—</p>
+        </div>
+        <div class="stat-card p-4">
+          <p class="text-xs font-semibold text-[var(--warn)] uppercase tracking-wide mb-1">Owner deactivated</p>
+          <p id="stat-orphaned-courses" class="text-2xl font-extrabold tracking-tight text-[var(--warn)]">—</p>
+        </div>
+        <div class="stat-card p-4">
+          <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Distinct teachers</p>
+          <p id="stat-teacher-count" class="text-2xl font-extrabold tracking-tight">—</p>
+        </div>
+      </div>
+
+      <div class="surface p-4 sm:p-5 mb-4 space-y-3">
         <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
           <div>
-            <label class="block text-xs font-medium text-[#5f6368] mb-1">Course ID</label>
+            <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Course ID</label>
             <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#80868b]" id="icon-search-course"></span>
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="icon-search-course"></span>
               <input id="course-id-input" type="text" placeholder="e.g. 123456789012"
-                class="w-full border border-[#dadce0] rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent transition-shadow">
+                class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring transition-shadow">
             </div>
           </div>
           <div class="flex sm:items-end">
-            <button id="btn-load-course" class="w-full sm:w-auto h-9 px-4 rounded-lg bg-[#1a73e8] text-white text-sm font-medium hover:bg-[#1765cc] active:scale-[0.98] transition-all shadow-sm shadow-[#1a73e8]/20">Load roster</button>
+            <button id="btn-load-course" class="w-full sm:w-auto h-9 px-4 rounded-lg btn-primary text-sm font-medium active:scale-[0.98] transition-all focus-ring">Load roster</button>
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button id="btn-open-enroll-ou" class="h-9 px-3 rounded-lg border border-[#dadce0] text-sm font-medium text-[#3c4043] hover:bg-[#f8f9fa] hover:border-[#80868b] active:scale-[0.98] transition-all flex items-center gap-1.5" disabled>
+          <button id="btn-open-enroll-ou" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
             <span class="w-3.5 h-3.5" id="icon-enroll-ou"></span> Enroll by OU
           </button>
-          <button id="btn-open-add-teacher" class="h-9 px-3 rounded-lg border border-[#dadce0] text-sm font-medium text-[#3c4043] hover:bg-[#f8f9fa] hover:border-[#80868b] active:scale-[0.98] transition-all flex items-center gap-1.5" disabled>
+          <button id="btn-open-add-teacher" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
             <span class="w-3.5 h-3.5" id="icon-add-teacher"></span> Assign teacher
           </button>
-          <button id="btn-open-add-student" class="h-9 px-3 rounded-lg bg-[#1e8e3e] text-white text-sm font-medium hover:bg-[#188038] active:scale-[0.98] transition-all flex items-center gap-1.5 shadow-sm shadow-[#1e8e3e]/20" disabled>
+          <button id="btn-open-add-student" class="h-9 px-3 rounded-lg bg-[var(--good)] text-white text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
             <span class="w-3.5 h-3.5" id="icon-add-student"></span> Enroll student
           </button>
         </div>
       </div>
 
       <!-- All classrooms browser -->
-      <div class="g-card overflow-hidden mb-4">
+      <div class="surface overflow-hidden mb-4">
         <div class="relative">
           <div id="courses-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
-            <div class="flex items-center gap-2 text-[#5f6368] text-sm">
+            <div class="flex items-center gap-2 text-[var(--ink-soft)] text-sm">
               <span class="w-5 h-5 animate-spin" id="icon-spinner-courses"></span> Loading classrooms…
             </div>
           </div>
-          <div class="px-4 py-3 border-b border-[#f1f3f4] space-y-3">
+          <div class="px-4 py-3 border-b border-[var(--paper)] space-y-3">
             <div class="flex items-center gap-2">
-              <span class="w-4 h-4 text-[#5f6368] shrink-0" id="icon-courses-header"></span>
-              <h2 class="font-display font-medium text-[#3c4043] shrink-0">All classrooms</h2>
-              <span id="courses-count" class="text-xs font-medium bg-[#f1f3f4] text-[#5f6368] rounded-full px-2 py-0.5 shrink-0">0</span>
+              <span class="w-4 h-4 text-[var(--ink-soft)] shrink-0" id="icon-courses-header"></span>
+              <h2 class="font-semibold shrink-0">All classrooms</h2>
+              <span id="courses-count" class="text-xs font-medium bg-[var(--paper)] text-[var(--ink-soft)] rounded-full px-2 py-0.5 shrink-0">0</span>
+              <label class="ml-auto flex items-center gap-1.5 text-xs font-medium text-[var(--ink-soft)] cursor-pointer select-none">
+                <input type="checkbox" id="filter-orphaned" class="rounded border-[var(--line)]">
+                Only owner-deactivated
+              </label>
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-2">
               <div class="relative min-w-0">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#80868b]" id="icon-search-courses"></span>
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="icon-search-courses"></span>
                 <input id="course-search" type="text" placeholder="Search by class name…"
-                  class="w-full border border-[#dadce0] rounded-lg pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent transition-shadow">
+                  class="w-full border border-[var(--line)] rounded-lg pl-8 pr-3 py-1.5 text-sm focus-ring transition-shadow">
               </div>
-              <button id="btn-refresh-courses" title="Refresh classrooms" class="h-8 w-8 flex items-center justify-center rounded-lg border border-[#dadce0] text-[#5f6368] hover:bg-[#f8f9fa] hover:border-[#80868b] active:scale-95 transition-all shrink-0">
+              <button id="btn-refresh-courses" title="Refresh classrooms" class="h-8 w-8 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-95 transition-all shrink-0 focus-ring">
                 <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
               </button>
             </div>
-            <div class="grid grid-cols-[auto_1fr] items-center gap-2">
-              <label for="course-ou-filter" class="text-xs font-medium text-[#5f6368] whitespace-nowrap">Scan teachers from</label>
-              <div class="relative min-w-0">
-                <select id="course-ou-filter" class="w-full appearance-none border border-[#dadce0] rounded-lg pl-3 pr-8 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent transition-shadow">
-                  <option value="">Entire domain (default)</option>
-                </select>
-                <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#80868b]" id="course-ou-filter-chevron"></div>
-              </div>
-            </div>
+            <p class="text-xs text-[var(--ink-faint)] leading-snug">Classrooms are listed domain-wide, including courses owned by teachers whose accounts are suspended or deleted.</p>
           </div>
-          <ul id="courses-list" class="divide-y divide-[#f1f3f4] max-h-80 overflow-y-auto">
-            <li class="px-4 py-10 text-center text-[#80868b] text-sm">Loading classrooms…</li>
+          <ul id="courses-list" class="divide-y divide-[var(--paper)] max-h-80 overflow-y-auto">
+            <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Loading classrooms…</li>
           </ul>
         </div>
       </div>
 
       <div class="grid md:grid-cols-2 gap-4">
         <!-- Teachers -->
-        <div class="g-card border-l-2 border-l-[#1a73e8] overflow-hidden">
+        <div class="surface border-l-[3px] border-l-[var(--accent)] overflow-hidden">
           <div class="relative">
             <div id="teachers-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
-              <span class="w-5 h-5 animate-spin text-[#5f6368]" id="icon-spinner-teachers"></span>
+              <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-teachers"></span>
             </div>
-            <div class="px-4 py-3 border-b border-[#f1f3f4] flex items-center gap-2">
-              <span class="w-4 h-4 text-[#1a73e8]" id="icon-teachers-header"></span>
-              <h2 class="font-display font-medium text-[#3c4043]">Teachers</h2>
-              <span id="teachers-count" class="ml-auto text-xs font-medium bg-[#e8f0fe] text-[#1765cc] rounded-full px-2 py-0.5">0</span>
+            <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2">
+              <span class="w-4 h-4 text-[var(--accent)]" id="icon-teachers-header"></span>
+              <h2 class="font-semibold">Teachers</h2>
+              <span id="teachers-count" class="ml-auto text-xs font-medium bg-[var(--accent-tint)] text-[var(--accent-ink)] rounded-full px-2 py-0.5">0</span>
             </div>
-            <ul id="teachers-list" class="divide-y divide-[#f1f3f4]">
-              <li class="px-4 py-10 text-center text-[#80868b] text-sm">Load a course to see its teachers.</li>
+            <ul id="teachers-list" class="divide-y divide-[var(--paper)]">
+              <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its teachers.</li>
             </ul>
           </div>
         </div>
 
         <!-- Students -->
-        <div class="g-card border-l-2 border-l-[#1e8e3e] overflow-hidden">
+        <div class="surface border-l-[3px] border-l-[var(--good)] overflow-hidden">
           <div class="relative">
             <div id="students-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
-              <span class="w-5 h-5 animate-spin text-[#5f6368]" id="icon-spinner-students"></span>
+              <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-students"></span>
             </div>
-            <div class="px-4 py-3 border-b border-[#f1f3f4] flex items-center gap-2">
-              <span class="w-4 h-4 text-[#1e8e3e]" id="icon-students-header"></span>
-              <h2 class="font-display font-medium text-[#3c4043]">Students</h2>
-              <span id="students-count" class="ml-auto text-xs font-medium bg-[#e6f4ea] text-[#188038] rounded-full px-2 py-0.5">0</span>
+            <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2">
+              <span class="w-4 h-4 text-[var(--good)]" id="icon-students-header"></span>
+              <h2 class="font-semibold">Students</h2>
+              <span id="students-count" class="ml-auto text-xs font-medium bg-[var(--good-tint)] text-[var(--good)] rounded-full px-2 py-0.5">0</span>
             </div>
-            <ul id="students-list" class="divide-y divide-[#f1f3f4]">
-              <li class="px-4 py-10 text-center text-[#80868b] text-sm">Load a course to see its students.</li>
+            <ul id="students-list" class="divide-y divide-[var(--paper)]">
+              <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its students.</li>
             </ul>
           </div>
         </div>
@@ -267,9 +300,11 @@
 
 <script>
 /* ============================================================
-   CONFIG
+   CONFIG — replace with your deployed Apps Script Web App URL
+   (Deploy > New deployment > Web app > "Execute as: Me",
+   "Who has access: Anyone within <your domain>" or "Anyone").
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbw1YdqNqG5rgwcbfPYEShrtIDK-jLfFjlEwOI6MGMJ2CSPsYWZtn3WS2_DBkCbTXca8/exec";
+const API_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
 
 /* ============================================================
    ICONS — raw inline SVG, no external icon libraries
@@ -291,6 +326,7 @@ const ICONS = {
   refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v6h6"></path><path d="M20 20v-6h-6"></path><path d="M5 15a8 8 0 0 0 14 3l1-1"></path><path d="M19 9a8 8 0 0 0-14-3L4 7"></path></svg>`,
   book: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5v-13A2.5 2.5 0 0 1 6.5 3z"></path></svg>`,
   chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>`,
+  warn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 1 21h22L12 2z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12" y2="17.01"></line></svg>`,
 };
 function icon(el, name, extraClass) {
   if (!el) return;
@@ -316,6 +352,7 @@ const state = {
   courses: [],
   filteredCourses: [],
   courseSearchQuery: '',
+  onlyOrphaned: false,
   loadingCourses: false,
   courseOuFilter: '',
   teachers: [],
@@ -361,6 +398,16 @@ function getCourseName(c) {
 function getCourseSection(c) {
   return c?.section || c?.descriptionHeading || '';
 }
+// True when the backend has flagged the course owner as suspended/deleted.
+// The backend (getCourses) should attach this boolean per course — see
+// Code.gs's buildCourseRecord(). Falls back to false if absent so older
+// backend responses don't break the UI.
+function isOwnerInactive(c) {
+  return c?.ownerInactive === true;
+}
+function getOwnerEmail(c) {
+  return c?.ownerEmail || c?.teacherEmail || '';
+}
 
 /* ============================================================
    TOASTS
@@ -369,11 +416,11 @@ function showToast(message, type = 'success') {
   const container = document.getElementById('toast-container');
   const el = document.createElement('div');
   const isSuccess = type === 'success';
-  el.className = `toast-in flex items-start gap-3 rounded-xl shadow-lg border px-4 py-3 text-sm ${isSuccess ? 'bg-white border-[#ceead6]' : 'bg-white border-[#fad2cf]'}`;
+  el.className = `toast-in flex items-start gap-3 rounded-xl shadow-lg border px-4 py-3 text-sm ${isSuccess ? 'bg-white border-[#c8e9d6]' : 'bg-white border-[#f6c9c5]'}`;
   el.innerHTML = `
-    <span class="w-5 h-5 shrink-0 mt-0.5 ${isSuccess ? 'text-[#1e8e3e]' : 'text-[#d93025]'}">${ICONS[isSuccess ? 'checkCircle' : 'alertCircle']}</span>
-    <span class="flex-1 text-[#3c4043] leading-snug">${escapeHtml(message)}</span>
-    <button class="shrink-0 text-[#80868b] hover:text-[#5f6368] w-4 h-4 mt-0.5">${ICONS.x}</button>
+    <span class="w-5 h-5 shrink-0 mt-0.5 ${isSuccess ? 'text-[var(--good)]' : 'text-[var(--bad)]'}">${ICONS[isSuccess ? 'checkCircle' : 'alertCircle']}</span>
+    <span class="flex-1 text-[var(--ink)] leading-snug">${escapeHtml(message)}</span>
+    <button class="shrink-0 text-[var(--ink-faint)] hover:text-[var(--ink-soft)] w-4 h-4 mt-0.5">${ICONS.x}</button>
   `;
   el.querySelector('button').addEventListener('click', () => el.remove());
   container.appendChild(el);
@@ -392,6 +439,9 @@ function showToast(message, type = 'success') {
    JSON.parse(e.postData.contents).
    ============================================================ */
 async function apiGet(params, timeoutMs = 30000) {
+  if (!API_URL || API_URL.indexOf('PASTE_YOUR') === 0) {
+    throw new Error('Set API_URL at the top of the <script> to your deployed Apps Script Web App URL.');
+  }
   const url = new URL(API_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const controller = new AbortController();
@@ -412,6 +462,9 @@ async function apiGet(params, timeoutMs = 30000) {
   }
 }
 async function apiPost(body, timeoutMs = 30000) {
+  if (!API_URL || API_URL.indexOf('PASTE_YOUR') === 0) {
+    throw new Error('Set API_URL at the top of the <script> to your deployed Apps Script Web App URL.');
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -484,19 +537,11 @@ async function fetchOUs() {
 }
 
 function populateCourseOuFilter() {
-  const filterSelect = document.getElementById('course-ou-filter');
-  if (!filterSelect) return;
-  const previousValue = filterSelect.value;
-  filterSelect.innerHTML = `<option value="">Entire domain (default)</option>` +
-    state.ous.map(ou => {
-      const path = ou.orgUnitPath || ou.path || '';
-      const name = ou.name || path;
-      return `<option value="${escapeHtml(path)}">${escapeHtml(name)}</option>`;
-    }).join('');
-  // Preserve the admin's selection across refreshes, if it still exists.
-  if (previousValue && state.ous.some(ou => (ou.orgUnitPath || ou.path) === previousValue)) {
-    filterSelect.value = previousValue;
-  }
+  // The "scan teachers from" OU scoping control was removed from the UI in
+  // favor of always listing courses domain-wide (see fetchCourses), which is
+  // both simpler and the only way to reliably surface courses owned by
+  // suspended/deleted teachers. state.ous is still used to populate the
+  // "Enroll by OU" modal.
 }
 
 async function fetchUsersByOU(orgUnitPath) {
@@ -533,11 +578,11 @@ function applyUserFilter() {
 function renderUserTable() {
   const tbody = document.getElementById('user-table-body');
   if (!state.selectedOU) {
-    tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-10 text-center text-[#80868b] text-sm">Select an organizational unit to load its roster.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Select an organizational unit to load its roster.</td></tr>`;
     return;
   }
   if (!state.loadingUsers && state.filteredUsers.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-10 text-center text-[#80868b] text-sm">No students match this OU or search.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No students match this OU or search.</td></tr>`;
     return;
   }
   tbody.innerHTML = state.filteredUsers.map(u => {
@@ -546,17 +591,17 @@ function renderUserTable() {
     const active = isUserActive(u);
     const checked = state.selectedUserIds.has(email) ? 'checked' : '';
     return `
-      <tr class="border-b border-[#f1f3f4] last:border-0 hover:bg-[#f8f9fa] transition">
-        <td class="px-4 py-3"><input type="checkbox" data-email="${escapeHtml(email)}" class="row-checkbox rounded border-[#dadce0]" ${checked}></td>
+      <tr class="border-b border-[var(--paper)] last:border-0 hover:bg-[var(--paper)] transition">
+        <td class="px-4 py-3"><input type="checkbox" data-email="${escapeHtml(email)}" class="row-checkbox rounded border-[var(--line)]" ${checked}></td>
         <td class="px-4 py-3">
           <div class="flex items-center gap-2.5">
-            <span class="w-7 h-7 rounded-full bg-[#d2e3fc] text-[#1765cc] text-xs font-medium flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
-            <span class="font-medium text-[#3c4043]">${escapeHtml(name)}</span>
+            <span class="w-7 h-7 rounded-full bg-[var(--accent-tint)] text-[var(--accent-ink)] text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
+            <span class="font-medium">${escapeHtml(name)}</span>
           </div>
         </td>
-        <td class="px-4 py-3 text-[#5f6368]">${escapeHtml(email)}</td>
+        <td class="px-4 py-3 text-[var(--ink-soft)] font-mono text-xs">${escapeHtml(email)}</td>
         <td class="px-4 py-3">
-          <span class="text-xs font-medium rounded-full px-2 py-0.5 ${active ? 'bg-[#e6f4ea] text-[#188038]' : 'bg-[#fce8e6] text-[#c5221f]'}">${active ? 'Active' : 'Suspended'}</span>
+          <span class="text-xs font-medium rounded-full px-2 py-0.5 ${active ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--bad-tint)] text-[var(--bad)]'}">${active ? 'Active' : 'Suspended'}</span>
         </td>
       </tr>`;
   }).join('');
@@ -593,16 +638,20 @@ async function fetchCourses(forceRefresh) {
   state.loadingCourses = true;
   document.getElementById('courses-loading').classList.remove('hidden');
   try {
+    // No teacherOuPath scoping: getCourses lists every course in the domain
+    // (ACTIVE + ARCHIVED + PROVISIONED + DECLINED), including courses owned
+    // by teachers whose accounts are now suspended or deleted. See Code.gs.
     const params = { action: 'getCourses', refresh: forceRefresh ? '1' : '0' };
-    if (state.courseOuFilter) params.teacherOuPath = state.courseOuFilter;
     const data = await apiGet(params, 100000);
     const courses = data.courses || (Array.isArray(data) ? data : []) || [];
     state.courses = courses;
     applyCourseFilter();
+    renderCourseStats(data);
   } catch (err) {
     state.courses = [];
     state.filteredCourses = [];
     renderCourses();
+    renderCourseStats(null);
     showToast(err.message || 'Failed to load classrooms', 'error');
   } finally {
     state.loadingCourses = false;
@@ -610,13 +659,32 @@ async function fetchCourses(forceRefresh) {
   }
 }
 
+function renderCourseStats(data) {
+  const total = state.courses.length;
+  const active = state.courses.filter(c => (c.courseState || '').toUpperCase() === 'ACTIVE').length;
+  const orphaned = state.courses.filter(isOwnerInactive).length;
+  const teacherSet = new Set(state.courses.map(getOwnerEmail).filter(Boolean));
+  document.getElementById('stat-total-courses').textContent = total || '0';
+  document.getElementById('stat-active-courses').textContent = active || '0';
+  document.getElementById('stat-orphaned-courses').textContent = orphaned || '0';
+  document.getElementById('stat-teacher-count').textContent = teacherSet.size || '0';
+}
+
 function applyCourseFilter() {
   const q = state.courseSearchQuery.trim().toLowerCase();
-  state.filteredCourses = !q ? state.courses.slice() : state.courses.filter(c =>
-    getCourseName(c).toLowerCase().includes(q) ||
-    getCourseSection(c).toLowerCase().includes(q) ||
-    getCourseId(c).toLowerCase().includes(q)
-  );
+  let list = state.courses.slice();
+  if (q) {
+    list = list.filter(c =>
+      getCourseName(c).toLowerCase().includes(q) ||
+      getCourseSection(c).toLowerCase().includes(q) ||
+      getCourseId(c).toLowerCase().includes(q) ||
+      getOwnerEmail(c).toLowerCase().includes(q)
+    );
+  }
+  if (state.onlyOrphaned) {
+    list = list.filter(isOwnerInactive);
+  }
+  state.filteredCourses = list;
   renderCourses();
 }
 
@@ -627,11 +695,11 @@ function renderCourses() {
   if (state.loadingCourses) return;
 
   if (!state.courses.length) {
-    list.innerHTML = `<li class="px-4 py-10 text-center text-[#80868b] text-sm">No classrooms found.</li>`;
+    list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms found.</li>`;
     return;
   }
   if (!state.filteredCourses.length) {
-    list.innerHTML = `<li class="px-4 py-10 text-center text-[#80868b] text-sm">No classrooms match your search.</li>`;
+    list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms match your search.</li>`;
     return;
   }
 
@@ -640,16 +708,18 @@ function renderCourses() {
     const name = getCourseName(c);
     const section = getCourseSection(c);
     const active = id === state.courseId;
+    const orphaned = isOwnerInactive(c);
     return `
-      <li class="card-row course-row cursor-pointer px-4 py-3 flex items-center gap-3 ${active ? 'bg-[#e8f0fe]' : 'hover:bg-[#f8f9fa]'}" data-course-id="${escapeHtml(id)}">
-        <span class="w-8 h-8 rounded-lg ${active ? 'bg-[#d2e3fc] text-[#1765cc]' : 'bg-[#f1f3f4] text-[#5f6368]'} flex items-center justify-center shrink-0">
+      <li class="card-row course-row cursor-pointer px-4 py-3 flex items-center gap-3 ${active ? 'bg-[var(--accent-tint)]' : 'hover:bg-[var(--paper)]'}" data-course-id="${escapeHtml(id)}">
+        <span class="w-8 h-8 rounded-lg ${active ? 'bg-white text-[var(--accent-ink)]' : 'bg-[var(--paper)] text-[var(--ink-soft)]'} flex items-center justify-center shrink-0">
           <span class="w-4 h-4 block">${ICONS.book}</span>
         </span>
         <div class="min-w-0 flex-1">
-          <p class="text-sm font-medium ${active ? 'text-[#174ea6]' : 'text-[#3c4043]'} truncate">${escapeHtml(name)}</p>
-          <p class="text-xs text-[#5f6368] truncate">${section ? escapeHtml(section) + ' · ' : ''}ID ${escapeHtml(id)}</p>
+          <p class="text-sm font-medium ${active ? 'text-[var(--accent-ink)]' : ''} truncate">${escapeHtml(name)}</p>
+          <p class="text-xs text-[var(--ink-faint)] truncate">${section ? escapeHtml(section) + ' · ' : ''}ID ${escapeHtml(id)}</p>
         </div>
-        <span class="w-4 h-4 text-[#dadce0] shrink-0">${ICONS.chevronRight}</span>
+        ${orphaned ? `<span class="shrink-0 flex items-center gap-1 text-xs font-medium text-[var(--warn)] bg-[var(--warn-tint)] rounded-full px-2 py-0.5" title="Owner account is suspended or deleted"><span class="w-3 h-3 block">${ICONS.warn}</span>Owner inactive</span>` : ''}
+        <span class="w-4 h-4 text-[var(--ink-faint)] shrink-0">${ICONS.chevronRight}</span>
       </li>`;
   }).join('');
 
@@ -698,11 +768,11 @@ function renderMembers() {
 
   const teachersList = document.getElementById('teachers-list');
   teachersList.innerHTML = state.teachers.length ? state.teachers.map(t => memberRow(t, 'teacher')).join('')
-    : `<li class="px-4 py-10 text-center text-[#80868b] text-sm">${state.courseId ? 'No teachers found for this course.' : 'Load a course to see its teachers.'}</li>`;
+    : `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No teachers found for this course.' : 'Load a course to see its teachers.'}</li>`;
 
   const studentsList = document.getElementById('students-list');
   studentsList.innerHTML = state.students.length ? state.students.map(s => memberRow(s, 'student')).join('')
-    : `<li class="px-4 py-10 text-center text-[#80868b] text-sm">${state.courseId ? 'No students found for this course.' : 'Load a course to see its students.'}</li>`;
+    : `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No students found for this course.' : 'Load a course to see its students.'}</li>`;
 
   document.querySelectorAll('.remove-member-btn').forEach(btn => {
     btn.addEventListener('click', () => confirmRemoveMember(btn.dataset.email, btn.dataset.role));
@@ -712,15 +782,15 @@ function renderMembers() {
 function memberRow(m, role) {
   const name = getMemberName(m);
   const email = getMemberEmail(m);
-  const accent = role === 'teacher' ? 'bg-[#d2e3fc] text-[#1765cc]' : 'bg-[#ceead6] text-[#188038]';
+  const accent = role === 'teacher' ? 'bg-[var(--accent-tint)] text-[var(--accent-ink)]' : 'bg-[var(--good-tint)] text-[var(--good)]';
   return `
     <li class="px-4 py-3 flex items-center gap-3">
-      <span class="w-8 h-8 rounded-full ${accent} text-xs font-medium flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
+      <span class="w-8 h-8 rounded-full ${accent} text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
       <div class="min-w-0 flex-1">
-        <p class="text-sm font-medium text-[#3c4043] truncate">${escapeHtml(name)}</p>
-        <p class="text-xs text-[#5f6368] truncate">${escapeHtml(email)}</p>
+        <p class="text-sm font-medium truncate">${escapeHtml(name)}</p>
+        <p class="text-xs text-[var(--ink-faint)] font-mono truncate">${escapeHtml(email)}</p>
       </div>
-      <button class="remove-member-btn shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-[#d93025] hover:bg-[#fce8e6] transition" data-email="${escapeHtml(email)}" data-role="${role}" title="Remove">
+      <button class="remove-member-btn shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--bad)] hover:bg-[var(--bad-tint)] transition focus-ring" data-email="${escapeHtml(email)}" data-role="${role}" title="Remove">
         <span class="w-4 h-4 block">${ICONS.trash}</span>
       </button>
     </li>`;
@@ -745,19 +815,19 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal
 function openAddTeacherModal() {
   openModal(`
     <div class="flex items-center justify-between mb-4">
-      <h3 class="font-display text-lg font-medium text-[#202124]">Assign teacher</h3>
-      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[#80868b] hover:bg-[#f1f3f4]">${ICONS.x}</button>
+      <h3 class="text-lg font-bold tracking-tight">Assign teacher</h3>
+      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
     </div>
-    <p class="text-sm text-[#5f6368] mb-3">Add a co-teacher to course <span class="font-medium text-[#3c4043]">${escapeHtml(state.courseId)}</span>.</p>
-    <label class="block text-xs font-medium text-[#5f6368] mb-1">Teacher email</label>
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Add a co-teacher to course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
+    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Teacher email</label>
     <div class="relative mb-4">
-      <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#80868b]">${ICONS.mail}</span>
+      <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
       <input id="teacher-email-input" type="email" placeholder="teacher@school.edu"
-        class="w-full border border-[#dadce0] rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent">
+        class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
     </div>
     <div class="flex justify-end gap-2">
-      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4] rounded-lg transition">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[#1a73e8] hover:bg-[#1765cc] rounded-lg transition flex items-center gap-2">
+      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
+      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white btn-primary rounded-lg transition flex items-center gap-2 focus-ring">
         <span>Add teacher</span>
       </button>
     </div>
@@ -785,19 +855,19 @@ function openAddTeacherModal() {
 function openAddStudentModal() {
   openModal(`
     <div class="flex items-center justify-between mb-4">
-      <h3 class="font-display text-lg font-medium text-[#202124]">Enroll student</h3>
-      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[#80868b] hover:bg-[#f1f3f4]">${ICONS.x}</button>
+      <h3 class="text-lg font-bold tracking-tight">Enroll student</h3>
+      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
     </div>
-    <p class="text-sm text-[#5f6368] mb-3">Enroll a student in course <span class="font-medium text-[#3c4043]">${escapeHtml(state.courseId)}</span>.</p>
-    <label class="block text-xs font-medium text-[#5f6368] mb-1">Student email</label>
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll a student in course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
+    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Student email</label>
     <div class="relative mb-4">
-      <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#80868b]">${ICONS.mail}</span>
+      <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
       <input id="student-email-input" type="email" placeholder="student@school.edu"
-        class="w-full border border-[#dadce0] rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e8e3e] focus:border-transparent">
+        class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
     </div>
     <div class="flex justify-end gap-2">
-      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4] rounded-lg transition">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[#1e8e3e] hover:bg-[#188038] rounded-lg transition">Enroll student</button>
+      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
+      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--good)] hover:opacity-90 rounded-lg transition focus-ring">Enroll student</button>
     </div>
   `);
   document.getElementById('modal-close').addEventListener('click', closeModal);
@@ -824,13 +894,13 @@ function confirmRemoveMember(email, role) {
   const label = role === 'teacher' ? 'teacher' : 'student';
   openModal(`
     <div class="flex items-center justify-between mb-4">
-      <h3 class="font-display text-lg font-medium text-[#202124]">Remove ${label}</h3>
-      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[#80868b] hover:bg-[#f1f3f4]">${ICONS.x}</button>
+      <h3 class="text-lg font-bold tracking-tight">Remove ${label}</h3>
+      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
     </div>
-    <p class="text-sm text-[#5f6368] mb-6">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(state.courseId)}</span>? This can't be undone from here.</p>
+    <p class="text-sm text-[var(--ink-soft)] mb-6">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(state.courseId)}</span>? This can't be undone from here.</p>
     <div class="flex justify-end gap-2">
-      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4] rounded-lg transition">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[#d93025] hover:bg-[#c5221f] rounded-lg transition">Remove</button>
+      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
+      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--bad)] hover:opacity-90 rounded-lg transition focus-ring">Remove</button>
     </div>
   `);
   document.getElementById('modal-close').addEventListener('click', closeModal);
@@ -857,16 +927,16 @@ function openEnrollSelectedModal() {
   const emails = Array.from(state.selectedUserIds);
   openModal(`
     <div class="flex items-center justify-between mb-4">
-      <h3 class="font-display text-lg font-medium text-[#202124]">Enroll selected students</h3>
-      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[#80868b] hover:bg-[#f1f3f4]">${ICONS.x}</button>
+      <h3 class="text-lg font-bold tracking-tight">Enroll selected students</h3>
+      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
     </div>
-    <p class="text-sm text-[#5f6368] mb-3">${emails.length} student(s) selected. Enter the destination course ID.</p>
-    <label class="block text-xs font-medium text-[#5f6368] mb-1">Course ID</label>
+    <p class="text-sm text-[var(--ink-soft)] mb-3">${emails.length} student(s) selected. Enter the destination course ID.</p>
+    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Course ID</label>
     <input id="bulk-course-id-input" type="text" placeholder="e.g. 123456789012"
-      class="w-full border border-[#dadce0] rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#1e8e3e] focus:border-transparent">
+      class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm mb-4 focus-ring">
     <div class="flex justify-end gap-2">
-      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4] rounded-lg transition">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[#1e8e3e] hover:bg-[#188038] rounded-lg transition">Enroll all</button>
+      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
+      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--good)] hover:opacity-90 rounded-lg transition focus-ring">Enroll all</button>
     </div>
   `);
   document.getElementById('modal-close').addEventListener('click', closeModal);
@@ -900,22 +970,22 @@ function openEnrollByOUModal() {
 
   openModal(`
     <div class="flex items-center justify-between mb-4">
-      <h3 class="font-display text-lg font-medium text-[#202124]">Enroll an entire OU</h3>
-      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[#80868b] hover:bg-[#f1f3f4]">${ICONS.x}</button>
+      <h3 class="text-lg font-bold tracking-tight">Enroll an entire OU</h3>
+      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
     </div>
-    <p class="text-sm text-[#5f6368] mb-3">Enroll every user in an organizational unit into course <span class="font-medium text-[#3c4043]">${escapeHtml(state.courseId)}</span>.</p>
-    <label class="block text-xs font-medium text-[#5f6368] mb-1">Organizational Unit</label>
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll every user in an organizational unit into course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
+    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Organizational Unit</label>
     <div class="relative mb-4">
-      <select id="enroll-ou-select" class="w-full appearance-none border border-[#dadce0] rounded-lg pl-3 pr-9 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e8e3e] focus:border-transparent">
+      <select id="enroll-ou-select" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm bg-white focus-ring">
         <option value="">Select an organizational unit…</option>
         ${ouOptions}
       </select>
-      <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#80868b]">${ICONS.chevronDown}</div>
+      <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.chevronDown}</div>
     </div>
-    <p id="enroll-ou-hint" class="hidden text-xs text-[#5f6368] mb-4"></p>
+    <p id="enroll-ou-hint" class="hidden text-xs text-[var(--ink-soft)] mb-4"></p>
     <div class="flex justify-end gap-2">
-      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4] rounded-lg transition">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[#1e8e3e] hover:bg-[#188038] rounded-lg transition">Enroll OU</button>
+      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
+      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--good)] hover:opacity-90 rounded-lg transition focus-ring">Enroll OU</button>
     </div>
   `);
   document.getElementById('modal-close').addEventListener('click', closeModal);
@@ -995,7 +1065,6 @@ function init() {
   icon(document.getElementById('icon-courses-header'), 'book');
   icon(document.getElementById('icon-search-courses'), 'search');
   icon(document.getElementById('icon-refresh-courses'), 'refresh');
-  icon(document.getElementById('course-ou-filter-chevron'), 'chevronDown');
   icon(document.getElementById('icon-spinner-courses'), 'spinner');
   icon(document.getElementById('icon-enroll-ou'), 'building');
 
@@ -1046,11 +1115,11 @@ function init() {
     state.courseSearchQuery = e.target.value;
     applyCourseFilter();
   });
-  document.getElementById('btn-refresh-courses').addEventListener('click', () => fetchCourses(true));
-  document.getElementById('course-ou-filter').addEventListener('change', (e) => {
-    state.courseOuFilter = e.target.value;
-    fetchCourses(true); // OU changed, so bypass the cache and rescan with the new scope
+  document.getElementById('filter-orphaned').addEventListener('change', (e) => {
+    state.onlyOrphaned = e.target.checked;
+    applyCourseFilter();
   });
+  document.getElementById('btn-refresh-courses').addEventListener('click', () => fetchCourses(true));
 
   fetchOUs();
   fetchCourses();
