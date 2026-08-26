@@ -21,49 +21,64 @@
      previous version. Layout is now a Micro-SaaS shell: fixed green top bar,
      a narrow icon rail on the far left, and a scrollable content column. */
   :root{
-    --bg:#0f1310;
-    --panel:#161c18;
-    --panel-2:#1c231e;
-    --line:#28322b;
-    --ink:#e8ede9;
-    --ink-soft:#a9b5ac;
-    --ink-faint:#788178;
+    /* Light, card-based theme: soft green gradient page background, white
+       cards, green primary + yellow accent — recolored from a blue/white
+       reference dashboard. */
+    --bg:#eef8f1;
+    --panel:#ffffff;
+    --panel-2:#f2faf5;
+    --field-bg:#ffffff;
+    --line:#e0ede4;
+    --ink:#182a20;
+    --ink-soft:#57685f;
+    --ink-faint:#8b9a91;
     --accent:#2ca15f;
-    --accent-ink:#3ecb7c;
-    --accent-tint:rgba(44,161,95,.14);
+    --accent-ink:#1f7d49;
+    --accent-tint:rgba(44,161,95,.10);
     --good:#2ca15f;
-    --good-tint:rgba(44,161,95,.14);
-    --bad:#d0584f;
-    --bad-tint:rgba(208,88,79,.14);
-    --warn:#d98b4a;
-    --warn-tint:rgba(217,139,74,.14);
+    --good-tint:rgba(44,161,95,.10);
+    --bad:#c94a41;
+    --bad-tint:rgba(201,74,65,.08);
+    --warn:#c97a2e;
+    --warn-tint:rgba(201,122,46,.10);
     --header-h:56px;
-    --rail-w:64px;
+    --rail-w:88px;
+    --yellow:#ffc200;
+    --yellow-ink:#8a6400;
+    --yellow-tint:rgba(255,194,0,.16);
+    --yellow-tint-strong:rgba(255,194,0,.26);
+    --card-shadow:0 1px 2px rgba(24,42,32,.04), 0 6px 20px rgba(24,42,32,.07);
     /* legacy aliases so unchanged markup below keeps working */
-    --paper:var(--bg);
+    --paper:#f6fbf8;
     --card:var(--panel);
   }
   *{ box-sizing:border-box; }
-  *{ scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.18) transparent; }
-  html,body{ font-family:'Google Sans','Google Sans Text',Roboto,system-ui,Arial,sans-serif; color:var(--ink); }
+  *{ scrollbar-width:thin; scrollbar-color:rgba(24,42,32,.18) transparent; }
+  html,body{
+    font-family:'Google Sans','Google Sans Text',Roboto,system-ui,Arial,sans-serif; color:var(--ink); line-height:1.3;
+    background:linear-gradient(160deg, #f3fcf6 0%, #e0f5e7 40%, #c7ecd4 75%, #aee0c1 100%);
+    background-attachment:fixed;
+  }
+  h1,h2,h3,p{ line-height:1.25; }
   .font-mono{ font-family:'Roboto Mono', ui-monospace, monospace; }
   ::-webkit-scrollbar{ width:10px; height:10px; }
   ::-webkit-scrollbar-track{ background:transparent; }
-  ::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.16); border-radius:10px; border:3px solid transparent; background-clip:content-box; }
-  ::-webkit-scrollbar-thumb:hover{ background:rgba(255,255,255,.3); background-clip:content-box; }
+  ::-webkit-scrollbar-thumb{ background:rgba(24,42,32,.16); border-radius:10px; border:3px solid transparent; background-clip:content-box; }
+  ::-webkit-scrollbar-thumb:hover{ background:rgba(24,42,32,.3); background-clip:content-box; }
   .fade-in{ animation:fadeIn .16s ease-out; }
   @keyframes fadeIn{ from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);} }
   .toast-in{ animation:toastIn .22s cubic-bezier(.34,1.56,.64,1); }
   @keyframes toastIn{ from{opacity:0; transform:translateX(24px);} to{opacity:1; transform:translateX(0);} }
   .hidden.flex,.hidden.grid{ display:none !important; }
   [v-cloak]{ display:none; }
-  .surface{ background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+  .surface{ background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--card-shadow); }
   .pill-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
   .pill-btn.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); }
   .focus-ring:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   .btn-primary{ background:var(--accent); color:#08150e; font-weight:600; }
   .btn-primary:hover{ filter:brightness(1.08); }
-  .stat-card{ background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+  .stat-card{ background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--card-shadow); position:relative; overflow:hidden; }
+  .stat-icon-badge{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; position:absolute; top:14px; right:14px; }
   .role-hide{ display:none !important; }
   .seg-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
   .seg-btn.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); font-weight:600; }
@@ -71,32 +86,33 @@
   /* ---- Micro-SaaS header + icon rail ---- */
   #app-header{
     position:fixed; top:0; left:0; right:0; height:var(--header-h); z-index:60;
-    background:var(--accent); color:#08150e; display:flex; align-items:center;
-    padding:0 16px; gap:12px; box-shadow:0 1px 0 rgba(0,0,0,.18);
+    background:var(--accent); color:#fff; display:flex; align-items:center;
+    padding:0 16px; gap:10px; box-shadow:0 1px 0 rgba(0,0,0,.18);
   }
-  #app-header .hdr-title{ font-weight:800; letter-spacing:-.01em; font-size:.95rem; line-height:1.15; }
-  #app-header .hdr-sub{ font-weight:600; font-size:.68rem; opacity:.75; }
+  #app-header .hdr-title{ font-weight:800; letter-spacing:-.01em; font-size:.95rem; line-height:1.1; color:#fff; }
+  #app-header .hdr-sub{ font-weight:600; font-size:.68rem; opacity:.85; line-height:1.1; color:#fff; }
+  #app-header img.hdr-logo{ height:30px; width:auto; display:block; object-fit:contain; }
   #icon-rail{
     position:fixed; top:var(--header-h); left:0; bottom:0; width:var(--rail-w); z-index:50;
-    background:var(--panel); border-right:1px solid var(--line);
+    background:var(--panel); border-right:1px solid var(--line); box-shadow:2px 0 12px rgba(24,42,32,.05);
     display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:4px;
   }
   .rail-btn{
-    width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center;
-    color:var(--ink-faint); transition:all .15s; flex-direction:column; gap:2px;
+    width:64px; height:56px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+    color:#000; transition:all .15s; flex-direction:column; gap:3px;
   }
-  .rail-btn span.rail-label{ font-size:.53rem; font-weight:600; letter-spacing:.01em; }
-  .rail-btn:hover{ background:var(--panel-2); color:var(--ink-soft); }
-  .rail-btn.is-active{ background:var(--accent-tint); color:var(--accent-ink); }
+  .rail-btn span.rail-label{ font-size:.6rem; font-weight:600; letter-spacing:.01em; line-height:1; }
+  .rail-btn:hover{ background:var(--panel-2); color:#000; }
+  .rail-btn.is-active{ background:var(--accent-tint); color:var(--accent); }
   #app-content{ margin-left:var(--rail-w); padding-top:var(--header-h); min-height:100vh; }
   @media (max-width: 768px){
-    :root{ --rail-w:56px; }
+    :root{ --rail-w:64px; }
     #app-header .hdr-sub{ display:none; }
     .rail-btn span.rail-label{ display:none; }
   }
 
   /* form controls */
-  select, input, textarea{ background:var(--bg) !important; color:var(--ink) !important; }
+  select, input, textarea{ background:var(--field-bg) !important; color:var(--ink) !important; }
   select option{ background:var(--panel); color:var(--ink); }
   input::placeholder, textarea::placeholder{ color:var(--ink-faint); }
   .border-\[var\(--line\)\]{ border-color:var(--line) !important; }
@@ -118,7 +134,7 @@
   code, .font-mono{ letter-spacing:.01em; }
 
   /* modal */
-  #modal-content{ background:var(--panel) !important; border:1px solid var(--line); }
+  #modal-content{ background:var(--panel) !important; border:1px solid var(--line); box-shadow:0 20px 50px rgba(24,42,32,.25); }
   #modal-backdrop{ background:rgba(6,10,7,.66) !important; }
 
   /* toasts */
@@ -128,10 +144,14 @@
   #login-screen{ background:var(--bg) !important; }
 
   /* ---- Manage Classrooms: drawer + split workspace ---- */
-  #classrooms-shell{ display:flex; align-items:flex-start; gap:16px; }
+  /* Negative margin pulls the drawer flush against the fixed icon rail, so
+     it reads as an extension of the rail rather than a separate floating
+     panel — "attached" rather than a gap + rounded corners on all sides. */
+  #classrooms-shell{ display:flex; align-items:flex-start; gap:16px; margin-left:-24px; }
   #classroom-drawer{
-    width:300px; flex-shrink:0; background:var(--panel); border:1px solid var(--line); border-radius:10px;
-    display:flex; flex-direction:column; max-height:calc(100vh - var(--header-h) - 110px); overflow:hidden;
+    width:300px; flex-shrink:0; background:var(--panel); border:1px solid var(--line); border-left:none;
+    border-radius:0 14px 14px 0; display:flex; flex-direction:column; min-height:0;
+    height:calc(100vh - var(--header-h) - 150px); min-height:360px; box-shadow:var(--card-shadow);
     transition:width .18s ease, opacity .18s ease;
   }
   #classroom-drawer.collapsed{ width:0; border:0; opacity:0; overflow:hidden; margin-right:-16px; }
@@ -142,14 +162,31 @@
   }
   .drawer-filter-tab{ font-size:.72rem; padding:5px 8px; border-radius:999px; color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); white-space:nowrap; }
   .drawer-filter-tab.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); font-weight:600; }
+  .drawer-list-wrap{ flex:1 1 auto; min-height:0; overflow-y:auto; }
   .drawer-course-item{ padding:10px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
   .drawer-course-item:hover{ background:var(--panel-2); }
-  .drawer-course-item.is-selected{ background:var(--accent-tint); border-left:3px solid var(--accent); }
+  .drawer-course-item.is-selected{ background:var(--accent); }
+  .drawer-course-item.is-selected p{ color:#08150e; }
+  .drawer-course-item.is-selected .text-\[var\(--ink-faint\)\]{ color:#08150e; opacity:.75; }
   #workspace-split{ display:grid; grid-template-columns:1fr; gap:16px; }
   @media (min-width:900px){ #workspace-split{ grid-template-columns:1fr 1fr; } }
+
+  /* ---- Yellow "transparent" headline strip used at the top of each view ---- */
+  .view-headline{
+    background:var(--yellow-tint); border:1px solid rgba(255,194,0,.4); border-radius:12px;
+    padding:8px 14px; margin-bottom:16px; display:inline-block; max-width:100%;
+  }
+  .view-headline h1{ font-size:1.05rem; font-weight:800; letter-spacing:-.01em; color:var(--ink); line-height:1.15; margin:0; }
+  .view-headline p{ font-size:.8rem; color:var(--ink-soft); line-height:1.2; margin:2px 0 0; }
+
+  /* ---- Classroom workspace title card ---- */
+  #workspace-title-card{
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--yellow);
+    border-radius:12px; padding:12px 16px; margin-bottom:14px; box-shadow:var(--card-shadow);
+  }
 </style>
 </head>
-<body class="bg-[var(--bg)] text-[var(--ink)] min-h-screen">
+<body class="text-[var(--ink)] min-h-screen">
 
   <!-- Sign-in gate -->
   <div id="login-screen" class="fixed inset-0 z-[100] bg-[var(--paper)] flex items-center justify-center p-6">
@@ -177,10 +214,11 @@
 
     <!-- Fixed green top header -->
     <header id="app-header">
-      <div class="w-8 h-8 rounded-lg bg-[#08150e]/15 flex items-center justify-center shrink-0">
+      <img src="classroom-manager-logo.png" alt="" class="hdr-logo shrink-0" onerror="this.style.display='none'; document.getElementById('hdr-logo-fallback').style.display='flex';">
+      <div id="hdr-logo-fallback" class="w-8 h-8 rounded-lg bg-white/15 items-center justify-center shrink-0" style="display:none;">
         <span class="w-4.5 h-4.5" id="icon-logo"></span>
       </div>
-      <div class="min-w-0 leading-tight">
+      <div class="min-w-0 leading-none">
         <p class="hdr-title truncate">Google Classroom Manager</p>
         <p class="hdr-sub truncate">St. Mary Catholic School</p>
       </div>
@@ -216,30 +254,36 @@
              VIEW 1: SUMMARY (data dashboard)
              ============================================================ -->
         <section id="view-summary">
-          <h1 class="text-lg font-bold tracking-tight mb-1">Summary</h1>
-          <p class="text-sm text-[var(--ink-faint)] mb-5">System-wide snapshot across all classrooms, teachers, and students.</p>
+          <p id="summary-greeting" class="text-lg font-bold tracking-tight mb-2 leading-none">Good morning!</p>
+          <div class="view-headline"><h1>Summary</h1><p>System-wide snapshot across all classrooms, teachers, and students.</p></div>
           <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
             <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:rgba(76,140,255,.14); color:#3f7ee8;"><span class="w-4.5 h-4.5" id="icon-badge-total"></span></div>
               <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total classrooms</p>
               <p id="stat-total-courses" class="text-3xl font-black tracking-tight">—</p>
             </div>
             <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:var(--good-tint); color:var(--good);"><span class="w-4.5 h-4.5" id="icon-badge-active"></span></div>
               <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Active classrooms</p>
               <p id="stat-active-courses" class="text-3xl font-black tracking-tight text-[var(--good)]">—</p>
             </div>
             <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:var(--yellow-tint); color:var(--yellow-ink);"><span class="w-4.5 h-4.5" id="icon-badge-archived"></span></div>
               <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Archived classrooms</p>
               <p id="stat-archived-courses" class="text-3xl font-black tracking-tight">—</p>
             </div>
             <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:var(--warn-tint); color:var(--warn);"><span class="w-4.5 h-4.5" id="icon-badge-orphaned"></span></div>
               <p class="text-xs font-semibold text-[var(--warn)] uppercase tracking-wide mb-1">Owner deactivated</p>
               <p id="stat-orphaned-courses" class="text-3xl font-black tracking-tight text-[var(--warn)]">—</p>
             </div>
             <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:rgba(155,110,230,.14); color:#7d4fce;"><span class="w-4.5 h-4.5" id="icon-badge-teachers"></span></div>
               <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total teachers</p>
               <p id="stat-total-teachers" class="text-3xl font-black tracking-tight">—</p>
             </div>
             <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:rgba(76,140,255,.14); color:#3f7ee8;"><span class="w-4.5 h-4.5" id="icon-badge-students"></span></div>
               <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total students</p>
               <p id="stat-total-students" class="text-3xl font-black tracking-tight">—</p>
             </div>
@@ -251,8 +295,7 @@
              VIEW 2: STUDENTS & STAFF (roster inspector)
              ============================================================ -->
         <section id="view-roster" class="hidden">
-          <h1 class="text-lg font-bold tracking-tight mb-1">Students &amp; Staff</h1>
-          <p class="text-sm text-[var(--ink-faint)] mb-4">Browse users strictly within a single Organizational Unit.</p>
+          <div class="view-headline"><h1>Students &amp; Staff</h1><p>Browse users strictly within a single Organizational Unit.</p></div>
 
           <div class="grid grid-cols-2 gap-3 mb-4 max-w-md">
             <div class="stat-card p-4">
@@ -331,9 +374,9 @@
              VIEW 3: MANAGE CLASSROOMS (drawer + split workspace)
              ============================================================ -->
         <section id="view-classrooms" class="hidden">
-          <div class="flex items-center gap-2 mb-4">
-            <h1 class="text-lg font-bold tracking-tight">Manage Classrooms</h1>
-            <button id="drawer-toggle" title="Toggle classroom list" class="ml-2 focus-ring">
+          <div class="flex items-center gap-2 mb-3 flex-wrap">
+            <div class="view-headline mb-0"><h1>Manage Classrooms</h1></div>
+            <button id="drawer-toggle" title="Toggle classroom list" class="ml-1 focus-ring">
               <span class="w-3.5 h-3.5" id="icon-drawer-toggle"></span>
             </button>
             <button id="btn-open-create-course" class="role-write ml-auto h-9 px-4 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
@@ -342,7 +385,7 @@
           </div>
 
           <div id="classrooms-shell">
-            <!-- Collapsible left drawer -->
+            <!-- Collapsible left drawer — visually attached to the icon rail -->
             <aside id="classroom-drawer">
               <div class="p-3 border-b border-[var(--line)] space-y-2">
                 <div class="flex items-center gap-2">
@@ -377,19 +420,13 @@
                 <button id="btn-course-clear-selection" class="text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Clear</button>
               </div>
 
-              <div class="relative flex-1 overflow-hidden">
+              <div class="drawer-list-wrap relative">
                 <div id="courses-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
                   <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-courses"></span>
                 </div>
-                <ul id="courses-list" class="divide-y divide-[var(--line)] overflow-y-auto h-full">
+                <ul id="courses-list" class="divide-y divide-[var(--line)]">
                   <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Loading classrooms…</li>
                 </ul>
-              </div>
-
-              <div class="p-3 border-t border-[var(--line)]">
-                <button id="btn-bulk-create" class="role-write w-full h-9 rounded-lg btn-primary text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 focus-ring">
-                  <span class="w-3.5 h-3.5" id="icon-bulk-create"></span> Bulk Create
-                </button>
               </div>
             </aside>
 
@@ -400,10 +437,10 @@
               </div>
 
               <div id="workspace-loaded" class="hidden">
-                <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+                <div id="workspace-title-card" class="flex items-start justify-between gap-3 flex-wrap">
                   <div class="min-w-0">
                     <h2 id="workspace-course-name" class="text-base font-bold truncate">—</h2>
-                    <p id="workspace-course-id" class="text-xs text-[var(--ink-faint)] font-mono">—</p>
+                    <p id="workspace-course-id" class="text-xs text-[var(--ink-faint)] font-mono leading-tight">—</p>
                   </div>
                   <div class="flex gap-2 shrink-0">
                     <button id="btn-export-grades" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
@@ -476,29 +513,35 @@
               </div>
             </div>
           </div>
+
+          <!-- Bulk Create — standalone, detached from the classroom list -->
+          <div class="mt-4">
+            <button id="btn-bulk-create" class="role-write w-full sm:w-auto h-10 px-5 rounded-lg btn-primary text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 focus-ring">
+              <span class="w-3.5 h-3.5" id="icon-bulk-create"></span> Bulk Create
+            </button>
+          </div>
         </section>
 
         <!-- ============================================================
              VIEW 4: SETTINGS (app configuration & admin controls)
              ============================================================ -->
         <section id="view-settings" class="hidden">
-          <h1 class="text-lg font-bold tracking-tight mb-1">Settings</h1>
-          <p class="text-sm text-[var(--ink-faint)] mb-5">App-wide configuration and administrative controls.</p>
+          <div class="view-headline"><h1>Settings</h1><p>App-wide configuration and administrative controls.</p></div>
 
           <div class="space-y-6 max-w-3xl">
-            <!-- OU Class Group Mappings -->
+            <!-- Class Group Renaming (OU -> friendly label mappings) -->
             <div class="surface p-4 sm:p-5">
-              <h2 class="font-semibold mb-1">Class Group mappings</h2>
-              <p class="text-xs text-[var(--ink-faint)] mb-3">Map an Organizational Unit to a human-readable label (e.g. "1st Grade"). These groups appear under "By Class Group" when enrolling students.</p>
+              <h2 class="font-semibold mb-1">Class Group Renaming</h2>
+              <p class="text-xs text-[var(--ink-faint)] mb-3">Rename an Organizational Unit to a friendlier, human-readable label (e.g. "1st Grade"). These renamed groups appear under "By Class Group" when enrolling students. This never changes anything in Google Admin — it's just a local label.</p>
               <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 mb-3">
                 <select id="mapping-ou-select" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
                   <option value="">Select OU…</option>
                 </select>
-                <input id="mapping-label-input" type="text" placeholder="Label, e.g. 1st Grade" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
-                <button id="btn-add-mapping" class="h-full px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Save mapping</button>
+                <input id="mapping-label-input" type="text" placeholder="Rename to, e.g. 1st Grade" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+                <button id="btn-add-mapping" class="h-full px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Save</button>
               </div>
               <ul id="mappings-list" class="divide-y divide-[var(--line)] border border-[var(--line)] rounded-lg overflow-hidden">
-                <li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No class group mappings yet.</li>
+                <li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No renamed class groups yet.</li>
               </ul>
             </div>
 
@@ -518,16 +561,16 @@
                   <select id="setting-student-ou" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
                     <option value="">Select OU…</option>
                   </select>
-                  <p class="text-xs text-[var(--ink-faint)] mt-1">The parent OU containing grade-level sub-OUs (e.g. "class of 2029").</p>
+                  <p class="text-xs text-[var(--ink-faint)] mt-1">This OU itself holds no students directly — only its sub-OUs do (e.g. "class of 2029"). Student counts and lookups read from the sub-OUs underneath it, not from this OU itself.</p>
                 </div>
               </div>
               <button id="btn-save-scope" class="mt-3 h-9 px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Save scope</button>
             </div>
 
-            <!-- User & role management (admin only) -->
+            <!-- User Management (admin only) -->
             <div id="settings-admin-panel" class="surface p-4 sm:p-5 role-admin">
-              <h2 class="font-semibold mb-1">User &amp; role management</h2>
-              <p class="text-xs text-[var(--ink-faint)] mb-3">Invite app users and assign a role. Saved directly to the Google Sheet backend.</p>
+              <h2 class="font-semibold mb-1">User Management</h2>
+              <p class="text-xs text-[var(--ink-faint)] mb-3">Add app users and assign a role, or edit an existing user's role. Saved directly to the Google Sheet backend.</p>
               <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 mb-3">
                 <input id="invite-email-input" type="email" placeholder="person@school.edu" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
                 <select id="invite-role-select" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
@@ -538,6 +581,7 @@
                 </select>
                 <button id="btn-invite-user" class="h-full px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Add user</button>
               </div>
+              <p id="invite-editing-note" class="hidden text-xs text-[var(--accent-ink)] mb-2">Editing <span id="invite-editing-email" class="font-medium"></span> — saving will update their role. <button type="button" id="btn-cancel-edit-user" class="underline hover:opacity-70 focus-ring">Cancel</button></p>
               <ul id="app-users-list" class="divide-y divide-[var(--line)] border border-[var(--line)] rounded-lg overflow-hidden">
                 <li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No app users loaded.</li>
               </ul>
@@ -546,9 +590,8 @@
         </section>
 
       </main>
-      <footer class="border-t border-[var(--line)] px-4 sm:px-6 lg:px-8 py-5 text-center">
-        <p class="text-xs text-[var(--ink-faint)] tracking-wide">Google Classroom Manager · Lunch Counter App</p>
-        <p class="text-xs text-[var(--ink-faint)] mt-0.5">Made only for St. Mary Catholic School.</p>
+      <footer class="border-t border-[var(--line)] px-4 sm:px-6 lg:px-8 py-3 text-center">
+        <p class="text-xs text-[var(--ink-faint)] leading-tight">Made only for St. Mary Catholic School.</p>
       </footer>
     </div>
   </div>
@@ -557,7 +600,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbwa4QXfX_0j77sV4FaknZfkaGY63JuIK-Hww8sFr4iRhUsBOcxqbwL88saO41htb0oV/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxtlEhj_s0OTadz7FUNtl5Xz3BbIRLvFqkcYe9cw8ew1dxJhPA1C8ZdU9GELKGtrkc/exec";
 const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
@@ -626,6 +669,7 @@ const state = {
   ouMappings: [], // [{orgUnitPath, label}]
   appSettings: { staffOU: '', studentParentOU: '' },
   appUsers: [],
+  editingAppUserEmail: '',
   orgStats: null, // { totalStaff, totalStudents, totalTeachers }
 };
 
@@ -651,6 +695,10 @@ function isUserActive(u) {
 }
 function getMemberName(m) { return m?.profile?.name?.fullName || m?.name?.fullName || m?.fullName || m?.name || m?.profile?.emailAddress || m?.email || 'Unknown'; }
 function getMemberEmail(m) { return m?.profile?.emailAddress || m?.email || m?.emailAddress || ''; }
+function currentCourseLabel() {
+  const course = state.courses.find(c => getCourseId(c) === state.courseId);
+  return course ? getCourseName(course) : state.courseId;
+}
 function getCourseId(c) { return c?.id || c?.courseId || ''; }
 function getCourseName(c) { return c?.name || c?.courseName || getCourseId(c); }
 function getCourseSection(c) { return c?.section || c?.descriptionHeading || ''; }
@@ -1146,6 +1194,10 @@ function renderMembers() {
   document.getElementById('teachers-count').textContent = state.teachers.length;
   document.getElementById('students-count').textContent = state.students.length;
 
+  const selectAllBtn = document.getElementById('btn-select-all-students');
+  const allSelected = state.students.length > 0 && state.students.every(s => state.selectedStudentIds.has(getMemberEmail(s)));
+  selectAllBtn.textContent = allSelected ? 'Unselect all' : 'Select all';
+
   const teachersList = document.getElementById('teachers-list');
   teachersList.innerHTML = state.teachers.length ? state.teachers.map(t => memberRow(t, 'teacher')).join('')
     : `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No teachers found for this course.' : 'Load a course to see its teachers.'}</li>`;
@@ -1309,7 +1361,7 @@ function openAddTeacherModal() {
   const primary = state.teachers.find(t => t.isPrimary);
   const primaryEmail = primary ? getMemberEmail(primary) : '';
   openModal(modalShell('Assign teacher', `
-    <p class="text-sm text-[var(--ink-soft)] mb-3">Course <span class="font-medium">${escapeHtml(state.courseId)}</span></p>
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span></p>
     ${primary ? `
       <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Primary teacher</label>
       <input type="text" value="${escapeHtml(getMemberName(primary))} · ${escapeHtml(primaryEmail)}" disabled class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm mb-3 opacity-70">
@@ -1354,7 +1406,7 @@ function openAddTeacherModal() {
 
 function confirmMakePrimary(email) {
   openModal(modalShell('Make primary teacher', `
-    <p class="text-sm text-[var(--ink-soft)]">Make <span class="font-medium">${escapeHtml(email)}</span> the primary teacher (owner) of course <span class="font-medium">${escapeHtml(state.courseId)}</span>? Google Classroom requires the new owner to already be a teacher on the course, and some domains restrict ownership transfer entirely — if that's the case here you'll see an error from Google.</p>
+    <p class="text-sm text-[var(--ink-soft)]">Make <span class="font-medium">${escapeHtml(email)}</span> the primary teacher (owner) of course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span>? Google Classroom requires the new owner to already be a teacher on the course, and some domains restrict ownership transfer entirely — if that's the case here you'll see an error from Google.</p>
   `, 'Make primary'));
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
@@ -1376,7 +1428,7 @@ function confirmMakePrimary(email) {
 // (mapped in Settings) using bulkAddStudentsByOU under the hood.
 function openAddStudentModal() {
   openModal(modalShell('Enroll student(s)', `
-    <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll into course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll into course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span>.</p>
     <div class="flex gap-1 mb-3 p-1 bg-[var(--paper)] rounded-lg w-fit">
       <button type="button" id="as-tab-student" class="seg-btn is-active text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By Student</button>
       <button type="button" id="as-tab-group" class="seg-btn text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By Class Group</button>
@@ -1384,8 +1436,14 @@ function openAddStudentModal() {
     <div id="as-panel-student">
       <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Search students</label>
       <div class="relative">
-        <input id="as-student-search" type="text" autocomplete="off" placeholder="Start typing a name or email…" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
-        <div id="as-student-suggestions" class="hidden absolute z-10 left-0 right-0 mt-1 bg-[var(--panel)] border border-[var(--line)] rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+        <div class="flex gap-2">
+          <input id="as-student-search" type="text" autocomplete="off" placeholder="Type a name or email…" class="flex-1 min-w-0 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+          <button type="button" id="as-student-search-btn" class="shrink-0 h-full px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] focus-ring flex items-center gap-1.5">
+            <span class="w-3.5 h-3.5" id="icon-as-search"></span> Search
+          </button>
+        </div>
+        <div id="as-student-suggestions" class="hidden mt-1 bg-[var(--panel)] border border-[var(--line)] rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+        <p id="as-student-no-results" class="hidden text-xs text-[var(--bad)] mt-1.5">No students found with that name or email.</p>
       </div>
       <label class="block text-xs font-semibold text-[var(--ink-soft)] mt-3 mb-1">Selected students — one per line, or comma-separated</label>
       <textarea id="student-emails-input" rows="4" placeholder="student1@school.edu&#10;student2@school.edu" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring font-mono"></textarea>
@@ -1406,15 +1464,25 @@ function openAddStudentModal() {
   tabStudent.addEventListener('click', () => { mode = 'student'; tabStudent.classList.add('is-active'); tabGroup.classList.remove('is-active'); panelStudent.classList.remove('hidden'); panelGroup.classList.add('hidden'); });
   tabGroup.addEventListener('click', () => { mode = 'group'; tabGroup.classList.add('is-active'); tabStudent.classList.remove('is-active'); panelGroup.classList.remove('hidden'); panelStudent.classList.add('hidden'); });
 
-  // Autocomplete over whatever roster is already in memory (OU tab fetches).
+  // Search over whatever roster is already in memory (OU tab fetches). Runs
+  // only when the Search button is clicked (or Enter is pressed) — not on
+  // every keystroke — and surfaces a clear "no results" message on a miss.
+  icon(document.getElementById('icon-as-search'), 'search');
   const searchInput = document.getElementById('as-student-search');
+  const searchBtn = document.getElementById('as-student-search-btn');
   const suggestBox = document.getElementById('as-student-suggestions');
+  const noResults = document.getElementById('as-student-no-results');
   const emailsBox = document.getElementById('student-emails-input');
-  searchInput.addEventListener('input', () => {
+  function runStudentSearch() {
     const q = searchInput.value.trim().toLowerCase();
+    noResults.classList.add('hidden');
     if (!q) { suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; return; }
-    const matches = state.users.filter(u => getUserName(u).toLowerCase().includes(q) || getUserEmail(u).toLowerCase().includes(q)).slice(0, 8);
-    if (!matches.length) { suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; return; }
+    const matches = state.users.filter(u => getUserName(u).toLowerCase().includes(q) || getUserEmail(u).toLowerCase().includes(q)).slice(0, 20);
+    if (!matches.length) {
+      suggestBox.classList.add('hidden'); suggestBox.innerHTML = '';
+      noResults.classList.remove('hidden');
+      return;
+    }
     suggestBox.innerHTML = matches.map(u => `<div class="as-suggestion px-3 py-2 text-sm hover:bg-[var(--panel-2)] cursor-pointer" data-email="${escapeHtml(getUserEmail(u))}">${escapeHtml(getUserName(u))} <span class="text-xs text-[var(--ink-faint)] font-mono">${escapeHtml(getUserEmail(u))}</span></div>`).join('');
     suggestBox.classList.remove('hidden');
     suggestBox.querySelectorAll('.as-suggestion').forEach(row => row.addEventListener('click', () => {
@@ -1422,9 +1490,11 @@ function openAddStudentModal() {
       const existing = emailsBox.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
       if (!existing.includes(email)) existing.push(email);
       emailsBox.value = existing.join('\n');
-      searchInput.value = ''; suggestBox.classList.add('hidden'); suggestBox.innerHTML = '';
+      searchInput.value = ''; suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; noResults.classList.add('hidden');
     }));
-  });
+  }
+  searchBtn.addEventListener('click', runStudentSearch);
+  searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runStudentSearch(); } });
 
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
@@ -1462,7 +1532,7 @@ function openAddStudentModal() {
 
 function confirmRemoveMember(email, role) {
   const action = role === 'teacher' ? 'removeTeacher' : 'removeStudent';
-  openModal(modalShell('Remove member', `<p class="text-sm text-[var(--ink-soft)]">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(state.courseId)}</span>?</p>`, 'Remove', 'bg-[var(--bad)] hover:opacity-90'));
+  openModal(modalShell('Remove member', `<p class="text-sm text-[var(--ink-soft)]">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span>?</p>`, 'Remove', 'bg-[var(--bad)] hover:opacity-90'));
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
     setButtonLoading(btn, 'Removing…');
@@ -1576,12 +1646,42 @@ function renderSettingsView() {
 }
 function renderMappingsList() {
   const list = document.getElementById('mappings-list');
-  if (!state.ouMappings.length) { list.innerHTML = `<li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No class group mappings yet.</li>`; return; }
+  if (!state.ouMappings.length) { list.innerHTML = `<li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No renamed class groups yet.</li>`; return; }
   list.innerHTML = state.ouMappings.map(m => `
     <li class="px-3 py-2.5 flex items-center gap-2 text-sm">
       <span class="font-medium">${escapeHtml(m.label)}</span>
-      <span class="text-xs text-[var(--ink-faint)] font-mono truncate">${escapeHtml(m.orgUnitPath)}</span>
+      <span class="text-xs text-[var(--ink-faint)] font-mono truncate flex-1">${escapeHtml(m.orgUnitPath)}</span>
+      <button class="mapping-edit-btn shrink-0 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring px-1.5" data-ou="${escapeHtml(m.orgUnitPath)}" title="Edit">Edit</button>
+      <button class="mapping-delete-btn shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-[var(--bad)] hover:bg-[var(--bad-tint)] transition focus-ring" data-ou="${escapeHtml(m.orgUnitPath)}" title="Delete">
+        <span class="w-3.5 h-3.5 block">${ICONS.trash}</span>
+      </button>
     </li>`).join('');
+  list.querySelectorAll('.mapping-edit-btn').forEach(btn => btn.addEventListener('click', () => {
+    const m = state.ouMappings.find(x => x.orgUnitPath === btn.dataset.ou);
+    if (!m) return;
+    document.getElementById('mapping-ou-select').value = m.orgUnitPath;
+    document.getElementById('mapping-label-input').value = m.label;
+    document.getElementById('mapping-label-input').focus();
+  }));
+  list.querySelectorAll('.mapping-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
+    const orgUnitPath = btn.dataset.ou;
+    const m = state.ouMappings.find(x => x.orgUnitPath === orgUnitPath);
+    openModal(modalShell('Delete renamed class group', `<p class="text-sm text-[var(--ink-soft)]">Delete the renaming "<span class="font-medium">${escapeHtml(m ? m.label : orgUnitPath)}</span>"? The underlying OU is untouched — this only removes the friendly label.</p>`, 'Delete', 'bg-[var(--bad)] hover:opacity-90'));
+    wireModalButtons(async () => {
+      const modalBtn = document.getElementById('modal-submit');
+      setButtonLoading(modalBtn, 'Deleting…');
+      try {
+        await apiPost({ action: 'deleteOuMapping', orgUnitPath });
+        state.ouMappings = state.ouMappings.filter(x => x.orgUnitPath !== orgUnitPath);
+        renderMappingsList();
+        closeModal();
+        showToast('Renaming deleted.', 'success');
+      } catch (err) {
+        showToast(err.message || 'Failed to delete renaming', 'error');
+        resetButtonLoading(modalBtn, 'Delete');
+      }
+    });
+  }));
 }
 function renderAppUsersList() {
   const list = document.getElementById('app-users-list');
@@ -1591,7 +1691,18 @@ function renderAppUsersList() {
     <li class="px-3 py-2.5 flex items-center gap-2 text-sm">
       <span class="font-mono text-xs flex-1 truncate">${escapeHtml(u.email)}</span>
       <span class="text-xs font-medium bg-[var(--accent-tint)] text-[var(--accent-ink)] rounded-full px-2 py-0.5">${escapeHtml(roleLabel[u.role] || u.role)}</span>
+      <button class="app-user-edit-btn shrink-0 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring px-1.5" data-email="${escapeHtml(u.email)}" title="Edit">Edit</button>
     </li>`).join('');
+  list.querySelectorAll('.app-user-edit-btn').forEach(btn => btn.addEventListener('click', () => {
+    const u = state.appUsers.find(x => x.email === btn.dataset.email);
+    if (!u) return;
+    document.getElementById('invite-email-input').value = u.email;
+    document.getElementById('invite-role-select').value = u.role;
+    document.getElementById('invite-editing-note').classList.remove('hidden');
+    document.getElementById('invite-editing-email').textContent = u.email;
+    document.getElementById('btn-invite-user').textContent = 'Update user';
+    state.editingAppUserEmail = u.email;
+  }));
 }
 
 /* ============================================================
@@ -1601,6 +1712,19 @@ function boot() {
   icon(document.getElementById('icon-logo'), 'logo');
   icon(document.getElementById('icon-logo-login'), 'logo');
   icon(document.getElementById('rail-icon-summary'), 'gauge');
+  icon(document.getElementById('icon-badge-total'), 'book');
+  icon(document.getElementById('icon-badge-active'), 'checkCircle');
+  icon(document.getElementById('icon-badge-archived'), 'building');
+  icon(document.getElementById('icon-badge-orphaned'), 'warn');
+  icon(document.getElementById('icon-badge-teachers'), 'user');
+  icon(document.getElementById('icon-badge-students'), 'users');
+  const greetEl = document.getElementById('summary-greeting');
+  if (greetEl && state.me) {
+    const hour = new Date().getHours();
+    const part = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const name = (state.me.email.split('@')[0] || '').replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    greetEl.textContent = `${part}, ${name || 'there'}!`;
+  }
   icon(document.getElementById('rail-icon-roster'), 'users');
   icon(document.getElementById('rail-icon-classrooms'), 'book');
   icon(document.getElementById('rail-icon-settings'), 'gear');
@@ -1684,7 +1808,9 @@ function boot() {
   document.getElementById('btn-bulk-delete').addEventListener('click', () => confirmBulkCourseOp('bulkDeleteCourses', 'Delete', 'Permanently delete'));
   document.getElementById('btn-course-clear-selection').addEventListener('click', () => { state.selectedCourseIds.clear(); renderCourses(); });
   document.getElementById('btn-select-all-students').addEventListener('click', () => {
-    state.students.forEach(s => state.selectedStudentIds.add(getMemberEmail(s)));
+    const allSelected = state.students.length > 0 && state.students.every(s => state.selectedStudentIds.has(getMemberEmail(s)));
+    if (allSelected) state.selectedStudentIds.clear();
+    else state.students.forEach(s => state.selectedStudentIds.add(getMemberEmail(s)));
     renderMembers();
   });
   document.getElementById('btn-bulk-remove-students').addEventListener('click', confirmBulkRemoveStudents);
@@ -1724,18 +1850,28 @@ function boot() {
       showToast(err.message || 'Failed to save scope', 'error');
     }
   });
+  function resetAppUserForm() {
+    state.editingAppUserEmail = '';
+    document.getElementById('invite-email-input').value = '';
+    document.getElementById('invite-role-select').value = 'superadmin';
+    document.getElementById('invite-editing-note').classList.add('hidden');
+    document.getElementById('btn-invite-user').textContent = 'Add user';
+  }
+  document.getElementById('btn-cancel-edit-user').addEventListener('click', resetAppUserForm);
   document.getElementById('btn-invite-user').addEventListener('click', async () => {
     const email = document.getElementById('invite-email-input').value.trim();
     const role = document.getElementById('invite-role-select').value;
     if (!email) { showToast('Enter an email address.', 'error'); return; }
+    const isEdit = state.editingAppUserEmail === email;
     try {
       await apiPost({ action: 'addAppUser', email, role });
-      state.appUsers.push({ email, role });
+      const existing = state.appUsers.findIndex(u => u.email === email);
+      if (existing >= 0) state.appUsers[existing].role = role; else state.appUsers.push({ email, role });
       renderAppUsersList();
-      document.getElementById('invite-email-input').value = '';
-      showToast(`${email} added as ${role}.`, 'success');
+      resetAppUserForm();
+      showToast(isEdit ? `${email} updated to ${role}.` : `${email} added as ${role}.`, 'success');
     } catch (err) {
-      showToast(err.message || 'Failed to add user', 'error');
+      showToast(err.message || 'Failed to save user', 'error');
     }
   });
 
