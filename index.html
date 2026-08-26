@@ -254,8 +254,45 @@
   }
   #modal-backdrop{ background:rgba(9,26,17,.42) !important; backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); }
 
-  /* toasts */
-  #toast-container .toast-in{ background:var(--panel) !important; color:var(--ink); }
+  /* toasts — frosted card with a colored icon badge and a shrinking
+     progress bar so the confirmation reads clearly as "done", not just as
+     a passing line of text. */
+  #toast-container .toast-in{
+    background:rgba(255,255,255,.9) !important; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border:1px solid rgba(255,255,255,.6); color:var(--ink);
+    animation:toastSlideIn .25s ease;
+  }
+  @keyframes toastSlideIn{ from{ opacity:0; transform:translateX(16px) scale(.97); } to{ opacity:1; transform:translateX(0) scale(1); } }
+  .toast-icon-badge{
+    width:28px; height:28px; border-radius:999px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .toast-icon-badge.is-success{ background:rgba(44,161,95,.16); color:var(--good); animation:toastPop .35s ease; }
+  .toast-icon-badge.is-error{ background:rgba(201,74,65,.16); color:var(--bad); }
+  @keyframes toastPop{ 0%{ transform:scale(.4); opacity:0; } 60%{ transform:scale(1.15); opacity:1; } 100%{ transform:scale(1); } }
+  .toast-progress{ position:absolute; left:0; bottom:0; height:2px; border-radius:0 0 12px 12px; animation:toastShrink 6s linear forwards; }
+  .toast-progress.is-success{ background:var(--good); }
+  .toast-progress.is-error{ background:var(--bad); }
+  @keyframes toastShrink{ from{ width:100%; } to{ width:0%; } }
+
+  /* Custom checkboxes — a frosted square that fills solid green with a
+     white check on select, matching the rest of the translucent theme
+     instead of each browser's default checkbox chrome. */
+  .chk{
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    width:16px; height:16px; border-radius:5px; margin:0;
+    border:1.5px solid var(--line); background:rgba(255,255,255,.65);
+    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+    display:inline-block; position:relative; cursor:pointer; flex-shrink:0;
+    transition:background .15s, border-color .15s; vertical-align:middle;
+  }
+  .chk:hover{ border-color:var(--accent); }
+  .chk:checked{ background:var(--accent); border-color:var(--accent); }
+  .chk:checked::after{
+    content:''; position:absolute; left:50%; top:42%; width:28%; height:55%;
+    border:solid #fff; border-width:0 2px 2px 0; transform:translate(-50%,-50%) rotate(45deg);
+  }
+  .chk:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .chk:disabled{ opacity:.5; cursor:not-allowed; }
 
   /* login screen */
   #login-screen{ background:var(--bg) !important; }
@@ -498,7 +535,7 @@
                 <table class="w-full text-sm">
                   <thead>
                     <tr class="text-left text-xs text-[var(--ink-faint)] uppercase tracking-wide border-b border-[var(--line)]">
-                      <th class="px-4 py-3 w-10"><input type="checkbox" id="select-all" class="rounded border-[var(--line)]"></th>
+                      <th class="px-4 py-3 w-10"><input type="checkbox" id="select-all" class="chk"></th>
                       <th class="px-4 py-3">Name</th>
                       <th class="px-4 py-3">Email</th>
                       <th class="px-4 py-3">Class Group</th>
@@ -904,11 +941,12 @@ function showToast(message, type = 'success') {
   const container = document.getElementById('toast-container');
   const el = document.createElement('div');
   const isSuccess = type === 'success';
-  el.className = `toast-in flex items-start gap-3 rounded-xl shadow-lg border px-4 py-3 text-sm bg-[var(--panel)] ${isSuccess ? 'border-[#255c3b]' : 'border-[#5c3230]'}`;
+  el.className = `toast-in relative flex items-start gap-3 rounded-xl shadow-lg px-4 py-3 pb-3.5 text-sm overflow-hidden`;
   el.innerHTML = `
-    <span class="w-5 h-5 shrink-0 mt-0.5 ${isSuccess ? 'text-[var(--good)]' : 'text-[var(--bad)]'}">${ICONS[isSuccess ? 'checkCircle' : 'alertCircle']}</span>
-    <span class="flex-1 text-[var(--ink)] leading-snug">${escapeHtml(message)}</span>
-    <button class="shrink-0 text-[var(--ink-faint)] hover:text-[var(--ink-soft)] w-4 h-4 mt-0.5">${ICONS.x}</button>
+    <span class="toast-icon-badge ${isSuccess ? 'is-success' : 'is-error'}"><span class="w-4 h-4 block">${ICONS[isSuccess ? 'checkCircle' : 'alertCircle']}</span></span>
+    <span class="flex-1 text-[var(--ink)] leading-snug pt-1">${escapeHtml(message)}</span>
+    <button class="shrink-0 text-[var(--ink-faint)] hover:text-[var(--ink-soft)] w-4 h-4 mt-1.5">${ICONS.x}</button>
+    <span class="toast-progress ${isSuccess ? 'is-success' : 'is-error'}"></span>
   `;
   el.querySelector('button').addEventListener('click', () => el.remove());
   container.appendChild(el);
@@ -1207,7 +1245,7 @@ function renderUserTable() {
     const checked = state.selectedUserIds.has(email) ? 'checked' : '';
     return `
       <tr class="border-b border-[var(--paper)] last:border-0 hover:bg-[var(--paper)] transition">
-        <td class="px-4 py-3"><input type="checkbox" data-email="${escapeHtml(email)}" class="row-checkbox rounded border-[var(--line)]" ${checked}></td>
+        <td class="px-4 py-3"><input type="checkbox" data-email="${escapeHtml(email)}" class="row-checkbox chk" ${checked}></td>
         <td class="px-4 py-3"><div class="flex items-center gap-2.5">
           <span class="w-7 h-7 rounded-full bg-[var(--accent-tint)] text-[var(--accent-ink)] text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
           <span class="font-medium">${escapeHtml(name)}</span></div></td>
@@ -1325,7 +1363,7 @@ function renderCourses() {
     return `
       <li class="drawer-course-item course-row ${isSelected ? 'is-selected' : ''}" data-course-id="${escapeHtml(id)}">
         <div class="flex items-start gap-2">
-          <input type="checkbox" class="course-checkbox role-write rounded border-[var(--line)] mt-0.5 shrink-0" data-id="${escapeHtml(id)}" ${checked}>
+          <input type="checkbox" class="course-checkbox chk role-write mt-0.5 shrink-0" data-id="${escapeHtml(id)}" ${checked}>
           <div class="min-w-0 flex-1 course-open">
             <p class="text-sm font-medium truncate">${escapeHtml(name)}</p>
             <p class="text-xs text-[var(--ink-faint)] truncate">${escapeHtml(section || id)} ${isOwnerInactive(c) ? `<span class="text-[var(--warn)]">· owner inactive</span>` : ''} ${isOwnerOutsideStaffOu(c) ? `<span class="text-[var(--warn)]">· non-staff owner</span>` : ''}</p>
@@ -1493,7 +1531,7 @@ function memberRow(m, role) {
   if (role === 'student') {
     return `
       <li class="flex items-center gap-1.5 pl-2 pr-1 py-1.5 rounded-lg border border-[var(--line)] bg-[var(--panel-2)]/70 min-w-0" title="${escapeHtml(email)}">
-        <input type="checkbox" class="student-checkbox role-write rounded border-[var(--line)] shrink-0 w-3.5 h-3.5" data-email="${escapeHtml(email)}" ${state.selectedStudentIds.has(email) ? 'checked' : ''}>
+        <input type="checkbox" class="student-checkbox chk role-write shrink-0 w-3.5 h-3.5" data-email="${escapeHtml(email)}" ${state.selectedStudentIds.has(email) ? 'checked' : ''}>
         <span class="w-5 h-5 rounded-full bg-[var(--good-tint)] text-[var(--good)] text-[9px] font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
         <p class="text-xs font-medium truncate flex-1 min-w-0">${escapeHtml(name)}</p>
         <button class="remove-member-btn btn-icon-tint-bad role-write shrink-0 w-6 h-6 flex items-center justify-center rounded-md transition focus-ring" data-email="${escapeHtml(email)}" data-role="student" title="Remove">
