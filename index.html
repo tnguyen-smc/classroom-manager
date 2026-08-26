@@ -17,10 +17,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
 
 <style>
-  /* Dark, panel-based theme in the style requested — green accent + Google
-     Sans/Roboto kept from the previous version, everything else adapted:
-     flat panels instead of shadowed cards, hairline dividers, pill buttons,
-     faint badge chips, condensed density. */
+  /* Dark, panel-based theme — green accent + Google Sans/Roboto kept from the
+     previous version. Layout is now a Micro-SaaS shell: fixed green top bar,
+     a narrow icon rail on the far left, and a scrollable content column. */
   :root{
     --bg:#0f1310;
     --panel:#161c18;
@@ -38,6 +37,8 @@
     --bad-tint:rgba(208,88,79,.14);
     --warn:#d98b4a;
     --warn-tint:rgba(217,139,74,.14);
+    --header-h:56px;
+    --rail-w:64px;
     /* legacy aliases so unchanged markup below keeps working */
     --paper:var(--bg);
     --card:var(--panel);
@@ -57,9 +58,6 @@
   .hidden.flex,.hidden.grid{ display:none !important; }
   [v-cloak]{ display:none; }
   .surface{ background:var(--panel); border:1px solid var(--line); border-radius:10px; }
-  .nav-link{ color:var(--ink-soft); }
-  .nav-link:hover{ background:var(--panel-2); color:var(--ink); }
-  .nav-link.is-active{ background:var(--accent-tint); color:var(--accent-ink); }
   .pill-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
   .pill-btn.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); }
   .focus-ring:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
@@ -70,15 +68,40 @@
   .seg-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
   .seg-btn.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); font-weight:600; }
 
+  /* ---- Micro-SaaS header + icon rail ---- */
+  #app-header{
+    position:fixed; top:0; left:0; right:0; height:var(--header-h); z-index:60;
+    background:var(--accent); color:#08150e; display:flex; align-items:center;
+    padding:0 16px; gap:12px; box-shadow:0 1px 0 rgba(0,0,0,.18);
+  }
+  #app-header .hdr-title{ font-weight:800; letter-spacing:-.01em; font-size:.95rem; line-height:1.15; }
+  #app-header .hdr-sub{ font-weight:600; font-size:.68rem; opacity:.75; }
+  #icon-rail{
+    position:fixed; top:var(--header-h); left:0; bottom:0; width:var(--rail-w); z-index:50;
+    background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:4px;
+  }
+  .rail-btn{
+    width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+    color:var(--ink-faint); transition:all .15s; flex-direction:column; gap:2px;
+  }
+  .rail-btn span.rail-label{ font-size:.53rem; font-weight:600; letter-spacing:.01em; }
+  .rail-btn:hover{ background:var(--panel-2); color:var(--ink-soft); }
+  .rail-btn.is-active{ background:var(--accent-tint); color:var(--accent-ink); }
+  #app-content{ margin-left:var(--rail-w); padding-top:var(--header-h); min-height:100vh; }
+  @media (max-width: 768px){
+    :root{ --rail-w:56px; }
+    #app-header .hdr-sub{ display:none; }
+    .rail-btn span.rail-label{ display:none; }
+  }
+
   /* form controls */
   select, input, textarea{ background:var(--bg) !important; color:var(--ink) !important; }
   select option{ background:var(--panel); color:var(--ink); }
   input::placeholder, textarea::placeholder{ color:var(--ink-faint); }
   .border-\[var\(--line\)\]{ border-color:var(--line) !important; }
 
-  /* pill-style buttons (bordered, transparent, hover brightens) replacing the
-     old flat bordered look for secondary actions */
-  #btn-refresh-ous, #btn-refresh-courses{ background:var(--panel-2); }
+  #btn-refresh-ous, #btn-refresh-courses, #btn-refresh-drawer{ background:var(--panel-2); }
   #btn-open-enroll-ou, #btn-open-add-teacher, #btn-open-create-course,
   #btn-export-grades, #btn-export-topics{
     background:transparent; border:1px solid var(--line); color:var(--ink-soft);
@@ -87,16 +110,11 @@
   #btn-open-enroll-ou:hover, #btn-open-add-teacher:hover, #btn-open-create-course:hover,
   #btn-export-grades:hover, #btn-export-topics:hover{ color:var(--ink); border-color:var(--ink-soft); background:transparent; }
   #btn-open-add-student{ border-radius:999px; }
-  #btn-load-course{ border-radius:999px; }
 
-  /* rows / dividers */
   .divide-y > *{ border-color:var(--line) !important; }
   .border-b{ border-color:var(--line) !important; }
   tr.hover\:bg-\[var\(--paper\)\]:hover, li:hover{ background:var(--panel-2) !important; }
   .course-row:hover, tr:hover{ background:var(--panel-2); }
-
-  /* badges / chips */
-  .rounded-full{ }
   code, .font-mono{ letter-spacing:.01em; }
 
   /* modal */
@@ -106,12 +124,29 @@
   /* toasts */
   #toast-container .toast-in{ background:var(--panel) !important; color:var(--ink); }
 
-  /* sidebar */
-  aside{ background:var(--panel) !important; border-color:var(--line) !important; }
-  header.md\:hidden{ background:rgba(22,28,24,.95) !important; }
-
   /* login screen */
   #login-screen{ background:var(--bg) !important; }
+
+  /* ---- Manage Classrooms: drawer + split workspace ---- */
+  #classrooms-shell{ display:flex; align-items:flex-start; gap:16px; }
+  #classroom-drawer{
+    width:300px; flex-shrink:0; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    display:flex; flex-direction:column; max-height:calc(100vh - var(--header-h) - 110px); overflow:hidden;
+    transition:width .18s ease, opacity .18s ease;
+  }
+  #classroom-drawer.collapsed{ width:0; border:0; opacity:0; overflow:hidden; margin-right:-16px; }
+  #classroom-workspace{ flex:1; min-width:0; }
+  #drawer-toggle{
+    width:28px; height:28px; border-radius:8px; border:1px solid var(--line); color:var(--ink-soft);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--panel-2);
+  }
+  .drawer-filter-tab{ font-size:.72rem; padding:5px 8px; border-radius:999px; color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); white-space:nowrap; }
+  .drawer-filter-tab.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); font-weight:600; }
+  .drawer-course-item{ padding:10px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .drawer-course-item:hover{ background:var(--panel-2); }
+  .drawer-course-item.is-selected{ background:var(--accent-tint); border-left:3px solid var(--accent); }
+  #workspace-split{ display:grid; grid-template-columns:1fr; gap:16px; }
+  @media (min-width:900px){ #workspace-split{ grid-template-columns:1fr 1fr; } }
 </style>
 </head>
 <body class="bg-[var(--bg)] text-[var(--ink)] min-h-screen">
@@ -134,266 +169,381 @@
   <div id="toast-container" class="fixed top-4 right-4 z-[80] flex flex-col gap-2 w-[92vw] max-w-sm"></div>
 
   <!-- Modal -->
-  <div id="modal-backdrop" class="hidden fixed inset-0 bg-[#14201a]/45 z-70 flex items-center justify-center p-4">
+  <div id="modal-backdrop" class="hidden fixed inset-0 bg-[#14201a]/45 z-[90] flex items-center justify-center p-4">
     <div id="modal-content" class="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in max-h-[85vh] overflow-y-auto"></div>
   </div>
 
-  <div id="app-shell" class="hidden flex min-h-screen">
-    <aside class="hidden md:flex md:flex-col w-60 bg-[var(--panel)] border-r border-[var(--line)] shrink-0">
-      <div class="h-16 flex items-center gap-3 px-5 border-b border-[var(--line)]">
-        <div class="w-9 h-9 rounded-xl bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
-          <span class="w-4.5 h-4.5" id="icon-logo"></span>
-        </div>
-        <div class="min-w-0">
-          <p class="text-sm font-bold leading-tight truncate tracking-tight">Google Classroom Manager</p>
-          <p class="text-xs text-[var(--ink-faint)] leading-tight truncate">St. Mary Catholic School</p>
-        </div>
-      </div>
-      <nav class="flex-1 px-3 py-4 space-y-1">
-        <button data-tab="ou" class="tab-btn nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-ring">
-          <span class="w-5 h-5 shrink-0" id="nav-icon-ou"></span><span>OU &amp; Students</span>
-        </button>
-        <button data-tab="classroom" class="tab-btn nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-ring">
-          <span class="w-5 h-5 shrink-0" id="nav-icon-classroom"></span><span>Classrooms</span>
-        </button>
-      </nav>
-      <div class="px-5 py-4 border-t border-[var(--line)]">
-        <p id="whoami-email" class="text-xs font-medium text-[var(--ink)] truncate">—</p>
-        <p id="whoami-role" class="text-xs text-[var(--ink-faint)] truncate">—</p>
-        <button id="btn-sign-out" class="mt-2 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Sign out</button>
-      </div>
-    </aside>
+  <div id="app-shell" class="hidden">
 
-    <div class="flex-1 min-w-0 flex flex-col">
-      <header class="md:hidden bg-[var(--panel)]/95 backdrop-blur border-b border-[var(--line)] sticky top-0 z-30">
-        <div class="px-4 py-3 flex items-center gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
-            <span class="w-4 h-4" id="icon-logo-mobile"></span>
+    <!-- Fixed green top header -->
+    <header id="app-header">
+      <div class="w-8 h-8 rounded-lg bg-[#08150e]/15 flex items-center justify-center shrink-0">
+        <span class="w-4.5 h-4.5" id="icon-logo"></span>
+      </div>
+      <div class="min-w-0 leading-tight">
+        <p class="hdr-title truncate">Google Classroom Manager</p>
+        <p class="hdr-sub truncate">St. Mary Catholic School</p>
+      </div>
+      <div class="ml-auto flex items-center gap-3 shrink-0">
+        <div class="text-right leading-tight hidden sm:block">
+          <p id="whoami-email" class="text-xs font-semibold truncate max-w-[220px]">—</p>
+          <p id="whoami-role" class="text-[.65rem] opacity-70 truncate">—</p>
+        </div>
+        <button id="btn-sign-out" class="text-xs font-semibold bg-[#08150e]/15 hover:bg-[#08150e]/25 rounded-lg px-3 py-1.5 transition focus-ring">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Far-left icon rail -->
+    <nav id="icon-rail">
+      <button data-view="summary" class="rail-view-btn rail-btn focus-ring" title="Summary">
+        <span class="w-5 h-5" id="rail-icon-summary"></span><span class="rail-label">Summary</span>
+      </button>
+      <button data-view="roster" class="rail-view-btn rail-btn focus-ring" title="Students &amp; Staff">
+        <span class="w-5 h-5" id="rail-icon-roster"></span><span class="rail-label">Roster</span>
+      </button>
+      <button data-view="classrooms" class="rail-view-btn rail-btn focus-ring" title="Manage Classrooms">
+        <span class="w-5 h-5" id="rail-icon-classrooms"></span><span class="rail-label">Classes</span>
+      </button>
+      <button data-view="settings" class="rail-view-btn rail-btn focus-ring role-admin mt-auto" title="Settings">
+        <span class="w-5 h-5" id="rail-icon-settings"></span><span class="rail-label">Settings</span>
+      </button>
+    </nav>
+
+    <div id="app-content">
+      <main class="px-4 sm:px-6 lg:px-8 py-6 md:py-8 max-w-7xl w-full mx-auto">
+
+        <!-- ============================================================
+             VIEW 1: SUMMARY (data dashboard)
+             ============================================================ -->
+        <section id="view-summary">
+          <h1 class="text-lg font-bold tracking-tight mb-1">Summary</h1>
+          <p class="text-sm text-[var(--ink-faint)] mb-5">System-wide snapshot across all classrooms, teachers, and students.</p>
+          <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="stat-card p-5">
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total classrooms</p>
+              <p id="stat-total-courses" class="text-3xl font-black tracking-tight">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Active classrooms</p>
+              <p id="stat-active-courses" class="text-3xl font-black tracking-tight text-[var(--good)]">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Archived classrooms</p>
+              <p id="stat-archived-courses" class="text-3xl font-black tracking-tight">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <p class="text-xs font-semibold text-[var(--warn)] uppercase tracking-wide mb-1">Owner deactivated</p>
+              <p id="stat-orphaned-courses" class="text-3xl font-black tracking-tight text-[var(--warn)]">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total teachers</p>
+              <p id="stat-total-teachers" class="text-3xl font-black tracking-tight">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total students</p>
+              <p id="stat-total-students" class="text-3xl font-black tracking-tight">—</p>
+            </div>
           </div>
-          <h1 class="text-base font-bold flex-1 truncate tracking-tight">Google Classroom Manager</h1>
-          <button id="btn-sign-out-mobile" class="text-xs font-medium text-[var(--accent-ink)] focus-ring">Sign out</button>
-        </div>
-        <div class="px-4 pb-3 flex gap-2">
-          <button data-tab="ou" class="tab-btn pill-btn flex-1 text-sm font-medium rounded-lg py-2 transition-colors focus-ring">OU &amp; Students</button>
-          <button data-tab="classroom" class="tab-btn pill-btn flex-1 text-sm font-medium rounded-lg py-2 transition-colors focus-ring">Classrooms</button>
-        </div>
-      </header>
+          <p class="text-xs text-[var(--ink-faint)] mt-4 leading-relaxed">Classroom counts come from live Classroom API data. Total teacher/student counts use a <code class="font-mono">getOrgStats</code> backend action when available, falling back to distinct owners seen across loaded classrooms otherwise.</p>
+        </section>
 
-      <main class="flex-1 px-4 sm:px-6 lg:px-8 py-6 md:py-8 max-w-6xl w-full mx-auto">
+        <!-- ============================================================
+             VIEW 2: STUDENTS & STAFF (roster inspector)
+             ============================================================ -->
+        <section id="view-roster" class="hidden">
+          <h1 class="text-lg font-bold tracking-tight mb-1">Students &amp; Staff</h1>
+          <p class="text-sm text-[var(--ink-faint)] mb-4">Browse users strictly within a single Organizational Unit.</p>
 
-    <!-- TAB 1: OU & Student Browser -->
-    <section id="view-ou">
-      <div class="surface p-4 sm:p-5 mb-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Organizational Unit</label>
-            <div class="grid grid-cols-[1fr_auto] gap-2">
-              <div class="relative min-w-0">
-                <select id="ou-select" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm bg-[var(--bg)] focus-ring transition-shadow">
-                  <option value="">Loading organizational units…</option>
-                </select>
-                <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="ou-chevron"></div>
+          <div class="grid grid-cols-2 gap-3 mb-4 max-w-md">
+            <div class="stat-card p-4">
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Staff</p>
+              <p id="stat-staff-count" class="text-2xl font-black tracking-tight">—</p>
+            </div>
+            <div class="stat-card p-4">
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Students</p>
+              <p id="stat-student-count" class="text-2xl font-black tracking-tight">—</p>
+            </div>
+          </div>
+
+          <div class="surface p-4 sm:p-5 mb-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Class (Organizational Unit)</label>
+                <div class="grid grid-cols-[1fr_auto] gap-2">
+                  <div class="relative min-w-0">
+                    <select id="ou-select" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm bg-[var(--bg)] focus-ring transition-shadow">
+                      <option value="">Loading organizational units…</option>
+                    </select>
+                    <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="ou-chevron"></div>
+                  </div>
+                  <button id="btn-refresh-ous" title="Refresh OUs" class="h-9 w-9 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-95 transition-all shrink-0 focus-ring">
+                    <span class="w-4 h-4 block" id="icon-refresh-ous"></span>
+                  </button>
+                </div>
               </div>
-              <button id="btn-refresh-ous" title="Refresh OUs" class="h-9 w-9 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-95 transition-all shrink-0 focus-ring">
-                <span class="w-4 h-4 block" id="icon-refresh-ous"></span>
+              <div>
+                <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Search roster</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="icon-search"></span>
+                  <input id="user-search" type="text" placeholder="Filter by name or email…" disabled
+                    class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring disabled:bg-[var(--paper)] disabled:text-[var(--ink-faint)] transition-shadow">
+                </div>
+              </div>
+            </div>
+
+            <div id="selection-bar" class="hidden mt-4 flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[#bfe6cf] rounded-lg px-3 py-2">
+              <span class="text-sm text-[var(--accent-ink)] font-medium"><span id="selected-count">0</span> student(s) selected</span>
+              <button id="btn-enroll-selected" class="role-hide role-write ml-auto text-sm font-medium text-white btn-primary active:scale-[0.98] transition-all rounded-lg px-3 py-1.5 flex items-center gap-1.5 focus-ring">
+                <span class="w-3.5 h-3.5" id="icon-enroll-selected"></span> Enroll in course
               </button>
+              <button id="btn-clear-selection" class="text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1.5 focus-ring">Clear</button>
             </div>
           </div>
-          <div>
-            <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Search roster</label>
+
+          <div class="surface overflow-hidden">
             <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="icon-search"></span>
-              <input id="user-search" type="text" placeholder="Filter by name or email…" disabled
-                class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring disabled:bg-[var(--paper)] disabled:text-[var(--ink-faint)] transition-shadow">
+              <div id="ou-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                <div class="flex items-center gap-2 text-[var(--ink-soft)] text-sm">
+                  <span class="w-5 h-5 animate-spin" id="icon-spinner-users"></span> Loading roster…
+                </div>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-xs text-[var(--ink-faint)] uppercase tracking-wide border-b border-[var(--line)]">
+                      <th class="px-4 py-3 w-10"><input type="checkbox" id="select-all" class="rounded border-[var(--line)]"></th>
+                      <th class="px-4 py-3">Name</th>
+                      <th class="px-4 py-3">Email</th>
+                      <th class="px-4 py-3">OU Path</th>
+                      <th class="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="user-table-body">
+                    <tr><td colspan="5" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Select an organizational unit to load its roster.</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div id="selection-bar" class="hidden mt-4 flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[#bfe6cf] rounded-lg px-3 py-2">
-          <span class="text-sm text-[var(--accent-ink)] font-medium"><span id="selected-count">0</span> student(s) selected</span>
-          <button id="btn-enroll-selected" class="role-hide role-write ml-auto text-sm font-medium text-white btn-primary active:scale-[0.98] transition-all rounded-lg px-3 py-1.5 flex items-center gap-1.5 focus-ring">
-            <span class="w-3.5 h-3.5" id="icon-enroll-selected"></span> Enroll in course
-          </button>
-          <button id="btn-clear-selection" class="text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1.5 focus-ring">Clear</button>
-        </div>
-      </div>
-
-      <div class="surface overflow-hidden">
-        <div class="relative">
-          <div id="ou-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
-            <div class="flex items-center gap-2 text-[var(--ink-soft)] text-sm">
-              <span class="w-5 h-5 animate-spin" id="icon-spinner-users"></span> Loading roster…
-            </div>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="text-left text-xs text-[var(--ink-faint)] uppercase tracking-wide border-b border-[var(--line)]">
-                  <th class="px-4 py-3 w-10"><input type="checkbox" id="select-all" class="rounded border-[var(--line)]"></th>
-                  <th class="px-4 py-3">Name</th>
-                  <th class="px-4 py-3">Email</th>
-                  <th class="px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody id="user-table-body">
-                <tr><td colspan="4" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Select an organizational unit to load its roster.</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 2: Classroom & Member Inspector -->
-    <section id="view-classroom" class="hidden">
-
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <div class="stat-card p-4">
-          <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total classrooms</p>
-          <p id="stat-total-courses" class="text-2xl font-black tracking-tight">—</p>
-        </div>
-        <div class="stat-card p-4">
-          <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Active classrooms</p>
-          <p id="stat-active-courses" class="text-2xl font-black tracking-tight">—</p>
-        </div>
-        <div class="stat-card p-4">
-          <p class="text-xs font-semibold text-[var(--warn)] uppercase tracking-wide mb-1">Owner deactivated</p>
-          <p id="stat-orphaned-courses" class="text-2xl font-black tracking-tight text-[var(--warn)]">—</p>
-        </div>
-        <div class="stat-card p-4">
-          <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Distinct teachers</p>
-          <p id="stat-teacher-count" class="text-2xl font-black tracking-tight">—</p>
-        </div>
-      </div>
-
-      <div class="surface p-4 sm:p-5 mb-4 space-y-3">
-        <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Course ID</label>
-            <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="icon-search-course"></span>
-              <input id="course-id-input" type="text" placeholder="e.g. 123456789012"
-                class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring transition-shadow">
-            </div>
-          </div>
-          <div class="flex sm:items-end gap-2">
-            <button id="btn-load-course" class="w-full sm:w-auto h-9 px-4 rounded-lg btn-primary text-sm font-medium active:scale-[0.98] transition-all focus-ring">Load roster</button>
-            <button id="btn-open-create-course" class="role-write w-full sm:w-auto h-9 px-4 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
+        <!-- ============================================================
+             VIEW 3: MANAGE CLASSROOMS (drawer + split workspace)
+             ============================================================ -->
+        <section id="view-classrooms" class="hidden">
+          <div class="flex items-center gap-2 mb-4">
+            <h1 class="text-lg font-bold tracking-tight">Manage Classrooms</h1>
+            <button id="drawer-toggle" title="Toggle classroom list" class="ml-2 focus-ring">
+              <span class="w-3.5 h-3.5" id="icon-drawer-toggle"></span>
+            </button>
+            <button id="btn-open-create-course" class="role-write ml-auto h-9 px-4 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
               <span class="w-3.5 h-3.5" id="icon-create-course"></span> New classroom
             </button>
           </div>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button id="btn-open-enroll-ou" class="role-write h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
-            <span class="w-3.5 h-3.5" id="icon-enroll-ou"></span> Enroll by OU
-          </button>
-          <button id="btn-open-add-teacher" class="role-admin h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
-            <span class="w-3.5 h-3.5" id="icon-add-teacher"></span> Assign teacher
-          </button>
-          <button id="btn-open-add-student" class="role-write h-9 px-3 rounded-lg bg-[var(--good)] text-white text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
-            <span class="w-3.5 h-3.5" id="icon-add-student"></span> Enroll student
-          </button>
-          <button id="btn-export-grades" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
-            <span class="w-3.5 h-3.5" id="icon-export-grades"></span> Export grades
-          </button>
-          <button id="btn-export-topics" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
-            <span class="w-3.5 h-3.5" id="icon-export-topics"></span> Export topics &amp; assignments
-          </button>
-        </div>
-      </div>
 
-      <!-- View switcher — separate slick views instead of one long filtered list -->
-      <div id="course-view-tabs" class="flex flex-wrap gap-1.5 mb-3"></div>
+          <div id="classrooms-shell">
+            <!-- Collapsible left drawer -->
+            <aside id="classroom-drawer">
+              <div class="p-3 border-b border-[var(--line)] space-y-2">
+                <div class="flex items-center gap-2">
+                  <div class="relative flex-1 min-w-0">
+                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="icon-search-courses"></span>
+                    <input id="course-search" type="text" placeholder="Search classrooms…" class="w-full border border-[var(--line)] rounded-lg pl-8 pr-2 py-1.5 text-xs focus-ring">
+                  </div>
+                  <button id="btn-refresh-drawer" title="Refresh classrooms" class="h-8 w-8 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:text-[var(--ink)] shrink-0 focus-ring">
+                    <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
+                  </button>
+                </div>
+                <div class="relative">
+                  <select id="course-sort" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-2.5 pr-7 py-1.5 text-xs bg-[var(--bg)] focus-ring">
+                    <option value="updateTime_desc">Last active · newest</option>
+                    <option value="updateTime_asc">Last active · oldest</option>
+                    <option value="creationTime_desc">Created · newest</option>
+                    <option value="creationTime_asc">Created · oldest</option>
+                    <option value="name_asc">Name · A–Z</option>
+                    <option value="name_desc">Name · Z–A</option>
+                    <option value="owner_asc">Primary teacher · A–Z</option>
+                  </select>
+                  <div class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--ink-faint)]" id="course-sort-chevron"></div>
+                </div>
+                <div id="course-view-tabs" class="flex flex-wrap gap-1.5"></div>
+              </div>
 
-      <div class="surface overflow-hidden mb-4">
-        <div class="relative">
-          <div id="courses-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
-            <div class="flex items-center gap-2 text-[var(--ink-soft)] text-sm">
-              <span class="w-5 h-5 animate-spin" id="icon-spinner-courses"></span> Loading classrooms…
+              <div id="course-bulk-bar" class="hidden flex flex-wrap items-center gap-2 bg-[var(--accent-tint)] border-b border-[var(--line)] px-3 py-2">
+                <span class="text-xs text-[var(--accent-ink)] font-medium"><span id="course-selected-count">0</span> selected</span>
+                <button id="btn-bulk-archive" class="role-write bulk-archive-btn ml-auto text-xs font-medium text-[var(--warn)] hover:opacity-70 focus-ring">Archive</button>
+                <button id="btn-bulk-unarchive" class="role-write bulk-unarchive-btn text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Unarchive</button>
+                <button id="btn-bulk-delete" class="role-write text-xs font-medium text-[var(--bad)] hover:opacity-70 focus-ring">Delete</button>
+                <button id="btn-course-clear-selection" class="text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Clear</button>
+              </div>
+
+              <div class="relative flex-1 overflow-hidden">
+                <div id="courses-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                  <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-courses"></span>
+                </div>
+                <ul id="courses-list" class="divide-y divide-[var(--line)] overflow-y-auto h-full">
+                  <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Loading classrooms…</li>
+                </ul>
+              </div>
+
+              <div class="p-3 border-t border-[var(--line)]">
+                <button id="btn-bulk-create" class="role-write w-full h-9 rounded-lg btn-primary text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 focus-ring">
+                  <span class="w-3.5 h-3.5" id="icon-bulk-create"></span> Bulk Create
+                </button>
+              </div>
+            </aside>
+
+            <!-- Main workspace -->
+            <div id="classroom-workspace">
+              <div id="workspace-empty" class="surface p-10 text-center text-sm text-[var(--ink-faint)]">
+                Select a classroom from the list to open its workspace.
+              </div>
+
+              <div id="workspace-loaded" class="hidden">
+                <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+                  <div class="min-w-0">
+                    <h2 id="workspace-course-name" class="text-base font-bold truncate">—</h2>
+                    <p id="workspace-course-id" class="text-xs text-[var(--ink-faint)] font-mono">—</p>
+                  </div>
+                  <div class="flex gap-2 shrink-0">
+                    <button id="btn-export-grades" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
+                      <span class="w-3.5 h-3.5" id="icon-export-grades"></span> Export grades
+                    </button>
+                    <button id="btn-export-topics" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
+                      <span class="w-3.5 h-3.5" id="icon-export-topics"></span> Export topics &amp; assignments
+                    </button>
+                  </div>
+                </div>
+
+                <div id="workspace-split">
+                  <!-- Students (left) -->
+                  <div class="surface border-l-[3px] border-l-[var(--good)] overflow-hidden">
+                    <div class="relative">
+                      <div id="students-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                        <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-students"></span>
+                      </div>
+                      <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2 flex-wrap">
+                        <span class="w-4 h-4 text-[var(--good)]" id="icon-students-header"></span>
+                        <h2 class="font-semibold">Students</h2>
+                        <span id="students-count" class="text-xs font-medium bg-[var(--good-tint)] text-[var(--good)] rounded-full px-2 py-0.5">0</span>
+                        <button id="btn-select-all-students" class="role-write text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Select all</button>
+                        <button id="btn-open-add-student" class="role-write ml-auto w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--good)] text-white focus-ring" title="Add students">
+                          <span class="w-4 h-4" id="icon-add-student"></span>
+                        </button>
+                      </div>
+                      <div class="px-4 py-2 flex gap-2 border-b border-[var(--paper)]">
+                        <div class="relative flex-1 min-w-0">
+                          <span class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="icon-search-students"></span>
+                          <input id="student-search" type="text" placeholder="Search students…" class="w-full border border-[var(--line)] rounded-lg pl-8 pr-2 py-1.5 text-xs focus-ring">
+                        </div>
+                        <select id="student-sort" class="border border-[var(--line)] rounded-lg px-2 py-1.5 text-xs bg-[var(--bg)] focus-ring">
+                          <option value="name_asc">Name A–Z</option>
+                          <option value="name_desc">Name Z–A</option>
+                        </select>
+                      </div>
+                      <div id="student-bulk-bar" class="hidden px-4 py-2 flex items-center gap-3 bg-[var(--accent-tint)] border-b border-[#bfe6cf]">
+                        <span class="text-xs text-[var(--accent-ink)] font-medium"><span id="student-selected-count">0</span> selected</span>
+                        <button id="btn-bulk-remove-students" class="role-write ml-auto text-xs font-medium text-[var(--bad)] hover:opacity-70 focus-ring">Remove selected</button>
+                      </div>
+                      <ul id="students-list" class="divide-y divide-[var(--paper)] max-h-[26rem] overflow-y-auto">
+                        <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its students.</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <!-- Teachers (right) -->
+                  <div class="surface border-l-[3px] border-l-[var(--accent)] overflow-hidden self-start">
+                    <div class="relative">
+                      <div id="teachers-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                        <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-teachers"></span>
+                      </div>
+                      <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2">
+                        <span class="w-4 h-4 text-[var(--accent)]" id="icon-teachers-header"></span>
+                        <h2 class="font-semibold">Teachers</h2>
+                        <span id="teachers-count" class="text-xs font-medium bg-[var(--accent-tint)] text-[var(--accent-ink)] rounded-full px-2 py-0.5">0</span>
+                        <div class="relative ml-auto role-admin">
+                          <button id="btn-open-add-teacher" class="w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--accent)] text-[#08150e] focus-ring" title="Teacher actions">
+                            <span class="w-4 h-4" id="icon-add-teacher"></span>
+                          </button>
+                        </div>
+                      </div>
+                      <ul id="teachers-list" class="divide-y divide-[var(--paper)]">
+                        <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its teachers.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="px-4 py-3 border-b border-[var(--line)] space-y-3">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="w-4 h-4 text-[var(--ink-soft)] shrink-0" id="icon-courses-header"></span>
-              <h2 id="course-view-title" class="font-semibold shrink-0">Active classrooms</h2>
-              <span id="courses-count" class="text-xs font-medium bg-[var(--panel-2)] text-[var(--ink-soft)] rounded-full px-2 py-0.5 shrink-0">0</span>
-              <button id="btn-refresh-courses" title="Refresh classrooms" class="ml-auto h-8 w-8 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:text-[var(--ink)] hover:border-[var(--ink-soft)] active:scale-95 transition-all shrink-0 focus-ring">
-                <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
-              </button>
-            </div>
-            <div class="grid grid-cols-[1fr_auto] gap-2">
-              <div class="relative min-w-0">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="icon-search-courses"></span>
-                <input id="course-search" type="text" placeholder="Search by class name or teacher…"
-                  class="w-full border border-[var(--line)] rounded-lg pl-8 pr-3 py-1.5 text-sm focus-ring transition-shadow">
-              </div>
-              <div class="relative min-w-0">
-                <select id="course-sort" class="h-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-8 py-1.5 text-sm bg-[var(--bg)] focus-ring">
-                  <option value="updateTime_desc">Last active · newest</option>
-                  <option value="updateTime_asc">Last active · oldest</option>
-                  <option value="creationTime_desc">Created · newest</option>
-                  <option value="creationTime_asc">Created · oldest</option>
-                  <option value="name_asc">Name · A–Z</option>
-                  <option value="name_desc">Name · Z–A</option>
-                  <option value="owner_asc">Primary teacher · A–Z</option>
+        </section>
+
+        <!-- ============================================================
+             VIEW 4: SETTINGS (app configuration & admin controls)
+             ============================================================ -->
+        <section id="view-settings" class="hidden">
+          <h1 class="text-lg font-bold tracking-tight mb-1">Settings</h1>
+          <p class="text-sm text-[var(--ink-faint)] mb-5">App-wide configuration and administrative controls.</p>
+
+          <div class="space-y-6 max-w-3xl">
+            <!-- OU Class Group Mappings -->
+            <div class="surface p-4 sm:p-5">
+              <h2 class="font-semibold mb-1">Class Group mappings</h2>
+              <p class="text-xs text-[var(--ink-faint)] mb-3">Map an Organizational Unit to a human-readable label (e.g. "1st Grade"). These groups appear under "By Class Group" when enrolling students.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 mb-3">
+                <select id="mapping-ou-select" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+                  <option value="">Select OU…</option>
                 </select>
-                <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="course-sort-chevron"></div>
+                <input id="mapping-label-input" type="text" placeholder="Label, e.g. 1st Grade" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+                <button id="btn-add-mapping" class="h-full px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Save mapping</button>
               </div>
+              <ul id="mappings-list" class="divide-y divide-[var(--line)] border border-[var(--line)] rounded-lg overflow-hidden">
+                <li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No class group mappings yet.</li>
+              </ul>
             </div>
-            <div id="course-bulk-bar" class="hidden flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[var(--line)] rounded-lg px-3 py-2">
-              <span class="text-sm text-[var(--accent-ink)] font-medium"><span id="course-selected-count">0</span> classroom(s) selected</span>
-              <button id="btn-bulk-archive" class="role-write bulk-archive-btn ml-auto text-sm font-medium text-[var(--warn)] hover:opacity-70 px-2 py-1 focus-ring">Archive</button>
-              <button id="btn-bulk-unarchive" class="role-write bulk-unarchive-btn text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1 focus-ring">Unarchive</button>
-              <button id="btn-bulk-delete" class="role-write text-sm font-medium text-[var(--bad)] hover:opacity-70 px-2 py-1 focus-ring">Delete</button>
-              <button id="btn-course-clear-selection" class="text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1 focus-ring">Clear</button>
-            </div>
-            <p id="course-view-hint" class="text-xs text-[var(--ink-faint)] leading-snug"></p>
-          </div>
-          <ul id="courses-list" class="divide-y divide-[var(--line)] max-h-[32rem] overflow-y-auto">
-            <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Loading classrooms…</li>
-          </ul>
-        </div>
-      </div>
 
-      <div class="grid md:grid-cols-2 gap-4">
-        <div class="surface border-l-[3px] border-l-[var(--accent)] overflow-hidden">
-          <div class="relative">
-            <div id="teachers-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
-              <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-teachers"></span>
+            <!-- Global OU selectors -->
+            <div class="surface p-4 sm:p-5">
+              <h2 class="font-semibold mb-1">Global OU scope</h2>
+              <p class="text-xs text-[var(--ink-faint)] mb-3">Defines which Organizational Units the app treats as staff vs. students.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Staff OU</label>
+                  <select id="setting-staff-ou" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+                    <option value="">Select OU…</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Student parent OU</label>
+                  <select id="setting-student-ou" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+                    <option value="">Select OU…</option>
+                  </select>
+                  <p class="text-xs text-[var(--ink-faint)] mt-1">The parent OU containing grade-level sub-OUs (e.g. "class of 2029").</p>
+                </div>
+              </div>
+              <button id="btn-save-scope" class="mt-3 h-9 px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Save scope</button>
             </div>
-            <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2">
-              <span class="w-4 h-4 text-[var(--accent)]" id="icon-teachers-header"></span>
-              <h2 class="font-semibold">Teachers</h2>
-              <span id="teachers-count" class="ml-auto text-xs font-medium bg-[var(--accent-tint)] text-[var(--accent-ink)] rounded-full px-2 py-0.5">0</span>
-            </div>
-            <ul id="teachers-list" class="divide-y divide-[var(--paper)]">
-              <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its teachers.</li>
-            </ul>
-          </div>
-        </div>
 
-        <div class="surface border-l-[3px] border-l-[var(--good)] overflow-hidden">
-          <div class="relative">
-            <div id="students-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
-              <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-students"></span>
+            <!-- User & role management (admin only) -->
+            <div id="settings-admin-panel" class="surface p-4 sm:p-5 role-admin">
+              <h2 class="font-semibold mb-1">User &amp; role management</h2>
+              <p class="text-xs text-[var(--ink-faint)] mb-3">Invite app users and assign a role. Saved directly to the Google Sheet backend.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 mb-3">
+                <input id="invite-email-input" type="email" placeholder="person@school.edu" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+                <select id="invite-role-select" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+                  <option value="superadmin">Super admin</option>
+                  <option value="admin">Admin</option>
+                  <option value="dept_head">Department head</option>
+                  <option value="auditor">Auditor (read-only)</option>
+                </select>
+                <button id="btn-invite-user" class="h-full px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Add user</button>
+              </div>
+              <ul id="app-users-list" class="divide-y divide-[var(--line)] border border-[var(--line)] rounded-lg overflow-hidden">
+                <li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No app users loaded.</li>
+              </ul>
             </div>
-            <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2">
-              <span class="w-4 h-4 text-[var(--good)]" id="icon-students-header"></span>
-              <h2 class="font-semibold">Students</h2>
-              <span id="students-count" class="ml-auto text-xs font-medium bg-[var(--good-tint)] text-[var(--good)] rounded-full px-2 py-0.5">0</span>
-              <button id="btn-select-all-students" class="role-write ml-2 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Select all</button>
-            </div>
-            <div id="student-bulk-bar" class="hidden px-4 py-2 flex items-center gap-3 bg-[var(--accent-tint)] border-b border-[#bfe6cf]">
-              <span class="text-xs text-[var(--accent-ink)] font-medium"><span id="student-selected-count">0</span> selected</span>
-              <button id="btn-bulk-remove-students" class="role-write ml-auto text-xs font-medium text-[var(--bad)] hover:opacity-70 focus-ring">Remove selected</button>
-            </div>
-            <ul id="students-list" class="divide-y divide-[var(--paper)]">
-              <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its students.</li>
-            </ul>
           </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
       </main>
       <footer class="border-t border-[var(--line)] px-4 sm:px-6 lg:px-8 py-5 text-center">
@@ -407,7 +557,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbxHzaoUrkbCjYjjjR7YRHEHtbdr9AYy6z5FpTtb7Yptu6hU_TMVS-aXkcMtjpmzc-jc/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwa4QXfX_0j77sV4FaknZfkaGY63JuIK-Hww8sFr4iRhUsBOcxqbwL88saO41htb0oV/exec";
 const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
@@ -430,9 +580,13 @@ const ICONS = {
   refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v6h6"></path><path d="M20 20v-6h-6"></path><path d="M5 15a8 8 0 0 0 14 3l1-1"></path><path d="M19 9a8 8 0 0 0-14-3L4 7"></path></svg>`,
   book: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5v-13A2.5 2.5 0 0 1 6.5 3z"></path></svg>`,
   chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>`,
+  chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"></polyline></svg>`,
   warn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 1 21h22L12 2z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12" y2="17.01"></line></svg>`,
   star: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>`,
   download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M4 21h16"></path></svg>`,
+  upload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9"></path><path d="M7 14l5-5 5 5"></path><path d="M4 21h16"></path></svg>`,
+  gauge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path><path d="M4.5 19a9 9 0 1 1 15 0"></path><path d="M12 12l3-3"></path></svg>`,
+  gear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.13.36.42.65.78.78.36.13.51.15 1.82.15H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`,
 };
 function icon(el, name, extraClass) {
   if (!el) return;
@@ -447,7 +601,7 @@ function icon(el, name, extraClass) {
 const state = {
   idToken: '',
   me: null, // { email, role, ouScope }
-  activeTab: 'ou',
+  activeView: 'summary', // summary | roster | classrooms | settings
   ous: [],
   selectedOU: '',
   users: [],
@@ -465,7 +619,14 @@ const state = {
   selectedCourseIds: new Set(),
   teachers: [],
   students: [],
+  studentSearchQuery: '',
+  studentSort: 'name_asc',
   selectedStudentIds: new Set(),
+  drawerCollapsed: false,
+  ouMappings: [], // [{orgUnitPath, label}]
+  appSettings: { staffOU: '', studentParentOU: '' },
+  appUsers: [],
+  orgStats: null, // { totalStaff, totalStudents, totalTeachers }
 };
 
 /* ============================================================
@@ -481,6 +642,7 @@ function initials(name) {
 }
 function getUserName(u) { return u?.name?.fullName || u?.fullName || u?.name || u?.primaryEmail || 'Unknown'; }
 function getUserEmail(u) { return u?.primaryEmail || u?.email || ''; }
+function getUserOuPath(u) { return u?.orgUnitPath || u?.orgUnitPath1 || ''; }
 function isUserActive(u) {
   if (typeof u?.suspended === 'boolean') return !u.suspended;
   if (typeof u?.active === 'boolean') return u.active;
@@ -571,6 +733,10 @@ async function apiPost(body, timeoutMs = 30000) {
     throw err;
   } finally { clearTimeout(timer); }
 }
+// Soft-fail wrapper for optional/newer backend actions that may not exist yet.
+async function apiGetOptional(params, timeoutMs = 20000) {
+  try { return await apiGet(params, timeoutMs); } catch (err) { return null; }
+}
 
 /* ============================================================
    AUTH — Google Identity Services
@@ -599,7 +765,6 @@ async function onCredential(response) {
     state.me = { email: data.email, role: data.role, ouScope: data.ouScope };
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app-shell').classList.remove('hidden');
-    document.getElementById('app-shell').classList.add('flex');
     applyRoleUI();
     boot();
   } catch (err) {
@@ -615,7 +780,6 @@ function signOut() {
   state.me = null;
   google.accounts.id.disableAutoSelect();
   document.getElementById('app-shell').classList.add('hidden');
-  document.getElementById('app-shell').classList.remove('flex');
   document.getElementById('login-screen').classList.remove('hidden');
 }
 
@@ -624,7 +788,7 @@ function applyRoleUI() {
   document.getElementById('whoami-email').textContent = state.me.email;
   document.getElementById('whoami-role').textContent = { superadmin: 'Super admin', admin: 'Admin', dept_head: 'Department head', auditor: 'Auditor (read-only)' }[role] || role;
   // role-write: superadmin/admin/dept_head can enroll/remove students.
-  // role-admin: only superadmin/admin can manage courses/teachers.
+  // role-admin: only superadmin/admin can manage courses/teachers/settings.
   const canWrite = role === 'superadmin' || role === 'admin' || role === 'dept_head';
   const isAdmin = role === 'superadmin' || role === 'admin';
   document.querySelectorAll('.role-write').forEach(el => el.classList.toggle('role-hide', !canWrite));
@@ -632,21 +796,50 @@ function applyRoleUI() {
 }
 
 /* ============================================================
-   TAB SWITCHING
+   VIEW SWITCHING (icon rail)
    ============================================================ */
-function setActiveTab(tab) {
-  state.activeTab = tab;
-  document.getElementById('view-ou').classList.toggle('hidden', tab !== 'ou');
-  document.getElementById('view-classroom').classList.toggle('hidden', tab !== 'classroom');
-  const visible = document.getElementById(tab === 'ou' ? 'view-ou' : 'view-classroom');
-  visible.classList.remove('fade-in');
-  void visible.offsetWidth;
-  visible.classList.add('fade-in');
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('is-active', btn.dataset.tab === tab));
+const VIEW_IDS = ['summary', 'roster', 'classrooms', 'settings'];
+function setActiveView(view) {
+  if (view === 'settings' && state.me && !(state.me.role === 'superadmin' || state.me.role === 'admin')) return;
+  state.activeView = view;
+  VIEW_IDS.forEach(v => document.getElementById('view-' + v).classList.toggle('hidden', v !== view));
+  const visible = document.getElementById('view-' + view);
+  visible.classList.remove('fade-in'); void visible.offsetWidth; visible.classList.add('fade-in');
+  document.querySelectorAll('.rail-view-btn').forEach(btn => btn.classList.toggle('is-active', btn.dataset.view === view));
+  if (view === 'summary') renderSummaryStats();
+  if (view === 'settings') renderSettingsView();
 }
 
 /* ============================================================
-   TAB 1: OU & STUDENT BROWSER
+   SUMMARY VIEW
+   ============================================================ */
+async function loadOrgStats() {
+  const data = await apiGetOptional({ action: 'getOrgStats' });
+  if (data) state.orgStats = data;
+  renderSummaryStats();
+}
+function renderSummaryStats() {
+  const total = state.courses.length;
+  const active = state.courses.filter(c => (c.courseState || '').toUpperCase() === 'ACTIVE').length;
+  const archived = state.courses.filter(c => (c.courseState || '').toUpperCase() === 'ARCHIVED').length;
+  const orphaned = state.courses.filter(isOwnerInactive).length;
+  document.getElementById('stat-total-courses').textContent = total || '0';
+  document.getElementById('stat-active-courses').textContent = active || '0';
+  document.getElementById('stat-archived-courses').textContent = archived || '0';
+  document.getElementById('stat-orphaned-courses').textContent = orphaned || '0';
+
+  const teacherSet = new Set(state.courses.map(getOwnerEmail).filter(Boolean));
+  const totalTeachers = state.orgStats?.totalTeachers ?? teacherSet.size;
+  const totalStudents = state.orgStats?.totalStudents ?? '—';
+  document.getElementById('stat-total-teachers').textContent = totalTeachers || '0';
+  document.getElementById('stat-total-students').textContent = totalStudents;
+
+  document.getElementById('stat-staff-count').textContent = state.orgStats?.totalStaff ?? totalTeachers ?? '—';
+  document.getElementById('stat-student-count').textContent = state.orgStats?.totalStudents ?? '—';
+}
+
+/* ============================================================
+   VIEW: STUDENTS & STAFF (OU roster inspector)
    ============================================================ */
 async function fetchOUs() {
   const select = document.getElementById('ou-select');
@@ -656,14 +849,28 @@ async function fetchOUs() {
     const data = await apiGet({ action: 'getOUs' });
     const ous = data.ous || [];
     state.ous = ous;
-    select.innerHTML = ous.length
+    const opts = ous.length
       ? `<option value="">Select an organizational unit…</option>` + ous.map(ou => `<option value="${escapeHtml(ou.orgUnitPath)}">${escapeHtml(ou.name || ou.orgUnitPath)}</option>`).join('')
       : `<option value="">No organizational units found</option>`;
+    select.innerHTML = opts;
     select.disabled = false;
+    populateOuDependentSelects();
   } catch (err) {
     select.innerHTML = `<option value="">Failed to load OUs</option>`;
     showToast(err.message || 'Failed to load organizational units', 'error');
   }
+}
+function populateOuDependentSelects() {
+  const opts = `<option value="">Select OU…</option>` + state.ous.map(ou => `<option value="${escapeHtml(ou.orgUnitPath)}">${escapeHtml(ou.name || ou.orgUnitPath)}</option>`).join('');
+  ['mapping-ou-select', 'setting-staff-ou', 'setting-student-ou'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const current = el.value;
+    el.innerHTML = opts;
+    if (current) el.value = current;
+  });
+  if (state.appSettings.staffOU) document.getElementById('setting-staff-ou').value = state.appSettings.staffOU;
+  if (state.appSettings.studentParentOU) document.getElementById('setting-student-ou').value = state.appSettings.studentParentOU;
 }
 
 async function fetchUsersByOU(orgUnitPath) {
@@ -672,7 +879,13 @@ async function fetchUsersByOU(orgUnitPath) {
   document.getElementById('user-search').disabled = true;
   try {
     const data = await apiGet({ action: 'getUsersByOU', orgUnitPath });
-    state.users = data.users || [];
+    // Bug fix: some backends return users from sub-OUs too. Strictly keep
+    // only users whose orgUnitPath exactly matches the selected OU.
+    const raw = data.users || [];
+    state.users = raw.filter(u => {
+      const path = getUserOuPath(u);
+      return !path || path === orgUnitPath;
+    });
     state.selectedUserIds.clear();
     applyUserFilter();
     document.getElementById('user-search').disabled = false;
@@ -697,15 +910,15 @@ function applyUserFilter() {
 function renderUserTable() {
   const tbody = document.getElementById('user-table-body');
   if (!state.selectedOU) {
-    tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Select an organizational unit to load its roster.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Select an organizational unit to load its roster.</td></tr>`;
     return;
   }
   if (!state.loadingUsers && state.filteredUsers.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No students match this OU or search.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No students match this OU or search.</td></tr>`;
     return;
   }
   tbody.innerHTML = state.filteredUsers.map(u => {
-    const email = getUserEmail(u), name = getUserName(u), active = isUserActive(u);
+    const email = getUserEmail(u), name = getUserName(u), active = isUserActive(u), ouPath = getUserOuPath(u) || state.selectedOU;
     const checked = state.selectedUserIds.has(email) ? 'checked' : '';
     return `
       <tr class="border-b border-[var(--paper)] last:border-0 hover:bg-[var(--paper)] transition">
@@ -714,6 +927,7 @@ function renderUserTable() {
           <span class="w-7 h-7 rounded-full bg-[var(--accent-tint)] text-[var(--accent-ink)] text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
           <span class="font-medium">${escapeHtml(name)}</span></div></td>
         <td class="px-4 py-3 text-[var(--ink-soft)] font-mono text-xs">${escapeHtml(email)}</td>
+        <td class="px-4 py-3 text-[var(--ink-faint)] font-mono text-xs">${escapeHtml(ouPath)}</td>
         <td class="px-4 py-3"><span class="text-xs font-medium rounded-full px-2 py-0.5 ${active ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--bad-tint)] text-[var(--bad)]'}">${active ? 'Active' : 'Suspended'}</span></td>
       </tr>`;
   }).join('');
@@ -739,7 +953,7 @@ function updateSelectionBar() {
 }
 
 /* ============================================================
-   TAB 2: CLASSROOMS
+   VIEW: MANAGE CLASSROOMS
    ============================================================ */
 async function fetchCourses(forceRefresh) {
   state.loadingCourses = true;
@@ -749,12 +963,12 @@ async function fetchCourses(forceRefresh) {
     state.courses = data.courses || [];
     state.loadingCourses = false;
     applyCourseFilter();
-    renderCourseStats();
+    renderSummaryStats();
   } catch (err) {
     state.courses = []; state.filteredCourses = [];
     state.loadingCourses = false;
     renderCourses();
-    renderCourseStats();
+    renderSummaryStats();
     showToast(err.message || 'Failed to load classrooms', 'error');
   } finally {
     state.loadingCourses = false;
@@ -762,21 +976,8 @@ async function fetchCourses(forceRefresh) {
   }
 }
 
-function renderCourseStats() {
-  const total = state.courses.length;
-  const active = state.courses.filter(c => (c.courseState || '').toUpperCase() === 'ACTIVE').length;
-  const orphaned = state.courses.filter(isOwnerInactive).length;
-  const teacherSet = new Set(state.courses.map(getOwnerEmail).filter(Boolean));
-  document.getElementById('stat-total-courses').textContent = total || '0';
-  document.getElementById('stat-active-courses').textContent = active || '0';
-  document.getElementById('stat-orphaned-courses').textContent = orphaned || '0';
-  document.getElementById('stat-teacher-count').textContent = teacherSet.size || '0';
-  renderCourseViewTabs();
-}
-
-// Each "view" is its own slick tab instead of one long filtered scroll —
-// tabs map to real Classroom courseStates plus one virtual view
-// (orphaned = owner suspended/deleted) and an "All" catch-all.
+// Each "view" is its own filter tab — tabs map to real Classroom courseStates
+// plus one virtual view (orphaned = owner suspended/deleted) and an "All" catch-all.
 const COURSE_VIEWS = [
   { id: 'active', label: 'Active', test: c => (c.courseState || '').toUpperCase() === 'ACTIVE',
     hint: 'Classrooms currently in normal use.' },
@@ -788,7 +989,7 @@ const COURSE_VIEWS = [
     hint: 'The invited owner declined — these are effectively unused.' },
   { id: 'orphaned', label: 'Owner inactive', test: isOwnerInactive,
     hint: 'Owning teacher\u2019s account is suspended or deleted, across any state.' },
-  { id: 'all', label: 'All', test: () => true, hint: 'Every classroom in the domain, any state.' },
+  { id: 'all', label: 'All', test: () => true, hint: 'Every classroom regardless of state.' },
 ];
 function currentView() { return COURSE_VIEWS.find(v => v.id === state.courseView) || COURSE_VIEWS[0]; }
 
@@ -796,96 +997,67 @@ function renderCourseViewTabs() {
   const wrap = document.getElementById('course-view-tabs');
   wrap.innerHTML = COURSE_VIEWS.map(v => {
     const count = state.courses.filter(v.test).length;
-    const active = v.id === state.courseView;
-    return `<button type="button" class="course-view-tab seg-btn ${active ? 'is-active' : ''} text-xs font-medium rounded-full px-3.5 py-1.5 focus-ring" data-view="${v.id}">${v.label} <span class="opacity-70">${count}</span></button>`;
+    return `<button data-view="${v.id}" class="drawer-filter-tab ${state.courseView === v.id ? 'is-active' : ''}">${v.label} <span class="opacity-70">${count}</span></button>`;
   }).join('');
-  document.querySelectorAll('.course-view-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.courseView = btn.dataset.view;
-      state.selectedCourseIds.clear();
-      applyCourseFilter();
-    });
+  wrap.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => { state.courseView = btn.dataset.view; applyCourseFilter(); });
   });
 }
 
 function sortCourses(list) {
-  const [field, dir] = state.courseSort.split('_');
-  const mul = dir === 'asc' ? 1 : -1;
-  return list.slice().sort((a, b) => {
+  const [key, dir] = state.courseSort.split('_');
+  const sorted = list.slice();
+  sorted.sort((a, b) => {
     let av, bv;
-    if (field === 'name') { av = getCourseName(a).toLowerCase(); bv = getCourseName(b).toLowerCase(); }
-    else if (field === 'owner') { av = getOwnerEmail(a).toLowerCase(); bv = getOwnerEmail(b).toLowerCase(); }
-    else { av = a[field] || ''; bv = b[field] || ''; } // creationTime / updateTime, ISO strings sort fine
-    if (av < bv) return -1 * mul;
-    if (av > bv) return 1 * mul;
+    if (key === 'name') { av = getCourseName(a).toLowerCase(); bv = getCourseName(b).toLowerCase(); }
+    else if (key === 'owner') { av = getOwnerEmail(a).toLowerCase(); bv = getOwnerEmail(b).toLowerCase(); }
+    else { av = new Date(a[key] || 0).getTime(); bv = new Date(b[key] || 0).getTime(); }
+    if (av < bv) return dir === 'asc' ? -1 : 1;
+    if (av > bv) return dir === 'asc' ? 1 : -1;
     return 0;
   });
+  return sorted;
 }
 
 function applyCourseFilter() {
-  const view = currentView();
-  document.getElementById('course-view-title').textContent = view.label + ' classrooms';
-  document.getElementById('course-view-hint').textContent = view.hint;
   const q = state.courseSearchQuery.trim().toLowerCase();
-  let list = state.courses.filter(view.test);
-  if (q) {
-    list = list.filter(c => getCourseName(c).toLowerCase().includes(q) || getCourseSection(c).toLowerCase().includes(q) ||
-      getCourseId(c).toLowerCase().includes(q) || getOwnerEmail(c).toLowerCase().includes(q));
-  }
+  let list = state.courses.filter(currentView().test);
+  if (q) list = list.filter(c => getCourseName(c).toLowerCase().includes(q) || getOwnerEmail(c).toLowerCase().includes(q));
   state.filteredCourses = sortCourses(list);
   renderCourseViewTabs();
   renderCourses();
 }
 
 function renderCourses() {
-  document.getElementById('courses-count').textContent = state.filteredCourses.length;
   const list = document.getElementById('courses-list');
-  if (state.loadingCourses) return;
-  if (!state.courses.length) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms found.</li>`; return; }
-  if (!state.filteredCourses.length) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms in this view match your search.</li>`; return; }
-
-  const view = state.courseView;
+  document.getElementById('courses-count') && (document.getElementById('courses-count').textContent = state.filteredCourses.length);
+  if (state.loadingCourses) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Loading classrooms…</li>`; return; }
+  if (!state.filteredCourses.length) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms match this view.</li>`; return; }
   list.innerHTML = state.filteredCourses.map(c => {
-    const id = getCourseId(c), name = getCourseName(c), section = getCourseSection(c);
-    const isLoaded = id === state.courseId;
-    const orphaned = isOwnerInactive(c);
-    const st = (c.courseState || '').toUpperCase();
+    const id = getCourseId(c), name = getCourseName(c), section = getCourseSection(c), st = (c.courseState || '').toUpperCase();
     const checked = state.selectedCourseIds.has(id) ? 'checked' : '';
-    const ownerLabel = getOwnerEmail(c) || (c.ownerId ? c.ownerId : 'Unknown');
+    const isSelected = state.courseId === id;
     return `
-      <li class="course-row px-4 py-3 flex items-center gap-3 ${isLoaded ? 'bg-[var(--accent-tint)]' : 'hover:bg-[var(--panel-2)]'}" data-course-id="${escapeHtml(id)}">
-        <input type="checkbox" class="course-checkbox role-write rounded border-[var(--line)] shrink-0" data-id="${escapeHtml(id)}" ${checked}>
-        <span class="w-8 h-8 rounded-lg ${isLoaded ? 'bg-[var(--panel-2)] text-[var(--accent-ink)]' : 'bg-[var(--panel-2)] text-[var(--ink-soft)]'} flex items-center justify-center shrink-0 cursor-pointer course-open">
-          <span class="w-4 h-4 block">${ICONS.book}</span>
-        </span>
-        <div class="min-w-0 flex-1 cursor-pointer course-open">
-          <p class="text-sm font-medium ${isLoaded ? 'text-[var(--accent-ink)]' : ''} truncate">${escapeHtml(name)}</p>
-          <p class="text-xs text-[var(--ink-faint)] truncate">${section ? escapeHtml(section) + ' · ' : ''}ID ${escapeHtml(id)} · Created ${fmtDate(c.creationTime)} · Last active ${fmtDate(c.updateTime)}</p>
-          <p class="text-xs truncate mt-0.5 flex items-center gap-1 ${orphaned ? 'text-[var(--warn)]' : 'text-[var(--ink-soft)]'}">
-            <span class="w-3 h-3 shrink-0 ${orphaned ? 'text-[var(--warn)]' : 'text-[var(--accent)]'}">${ICONS.star}</span>
-            Primary teacher: ${escapeHtml(ownerLabel)}${orphaned ? ' (inactive)' : ''}
-          </p>
+      <li class="drawer-course-item course-row ${isSelected ? 'is-selected' : ''}" data-course-id="${escapeHtml(id)}">
+        <div class="flex items-start gap-2">
+          <input type="checkbox" class="course-checkbox role-write rounded border-[var(--line)] mt-0.5 shrink-0" data-id="${escapeHtml(id)}" ${checked}>
+          <div class="min-w-0 flex-1 course-open">
+            <p class="text-sm font-medium truncate">${escapeHtml(name)}</p>
+            <p class="text-xs text-[var(--ink-faint)] truncate">${escapeHtml(section || id)} ${isOwnerInactive(c) ? `<span class="text-[var(--warn)]">· owner inactive</span>` : ''}</p>
+          </div>
         </div>
-        <span class="shrink-0 text-xs font-medium rounded-full px-2 py-0.5 ${st === 'ACTIVE' ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--panel-2)] text-[var(--ink-soft)]'}">${escapeHtml(c.courseState || '')}</span>
-        <div class="shrink-0 flex items-center gap-1 role-write">
-          ${st !== 'ARCHIVED' ? `<button class="course-archive-one w-7 h-7 flex items-center justify-center rounded-lg text-[var(--warn)] hover:bg-[var(--warn-tint)] transition focus-ring" data-id="${escapeHtml(id)}" title="Archive">${ICONS.building}</button>` : ''}
-          ${st === 'ARCHIVED' ? `<button class="course-unarchive-one w-7 h-7 flex items-center justify-center rounded-lg text-[var(--accent-ink)] hover:bg-[var(--accent-tint)] transition focus-ring" data-id="${escapeHtml(id)}" title="Unarchive">${ICONS.refresh}</button>` : ''}
-          <button class="course-delete-one w-7 h-7 flex items-center justify-center rounded-lg text-[var(--bad)] hover:bg-[var(--bad-tint)] transition focus-ring" data-id="${escapeHtml(id)}" title="Delete">${ICONS.trash}</button>
-        </div>
-        <span class="w-4 h-4 text-[var(--ink-faint)] shrink-0 course-open cursor-pointer">${ICONS.chevronRight}</span>
       </li>`;
   }).join('');
 
-  document.querySelectorAll('.course-open').forEach(el => {
+  list.querySelectorAll('.course-open').forEach(el => {
     el.addEventListener('click', () => {
-      const id = el.closest('.course-row').dataset.courseId;
-      document.getElementById('course-id-input').value = id;
+      const id = el.closest('.drawer-course-item').dataset.courseId;
       state.courseId = id;
       fetchCourseMembers(id);
       renderCourses();
     });
   });
-  document.querySelectorAll('.course-checkbox').forEach(cb => {
+  list.querySelectorAll('.course-checkbox').forEach(cb => {
     cb.addEventListener('change', (e) => {
       e.stopPropagation();
       const id = cb.dataset.id;
@@ -893,9 +1065,6 @@ function renderCourses() {
       updateCourseBulkBar();
     });
   });
-  document.querySelectorAll('.course-archive-one').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); confirmSingleCourseOp(btn.dataset.id, 'archiveCourse', 'Archive classroom', 'Archive this classroom? It becomes read-only in Classroom until unarchived.', 'Archive', 'bg-[var(--warn)] hover:opacity-90'); }));
-  document.querySelectorAll('.course-unarchive-one').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); confirmSingleCourseOp(btn.dataset.id, 'unarchiveCourse', 'Unarchive classroom', 'Reactivate this classroom?', 'Unarchive', 'btn-primary'); }));
-  document.querySelectorAll('.course-delete-one').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); confirmSingleCourseOp(btn.dataset.id, 'deleteCourse', 'Delete classroom', 'Permanently delete this classroom? This can\u2019t be undone. Google only allows deleting Archived or Provisioned classrooms.', 'Delete', 'bg-[var(--bad)] hover:opacity-90'); }));
   updateCourseBulkBar();
 }
 
@@ -908,7 +1077,7 @@ function confirmSingleCourseOp(courseId, action, title, body, submitLabel, submi
       await apiPost({ action, courseId });
       showToast(`${title} succeeded.`, 'success');
       closeModal();
-      if (state.courseId === courseId && action === 'deleteCourse') { state.courseId = ''; document.getElementById('course-id-input').value = ''; }
+      if (state.courseId === courseId && action === 'deleteCourse') { state.courseId = ''; showWorkspaceEmpty(); }
       fetchCourses(true);
     } catch (err) {
       showToast(err.message || `${title} failed`, 'error');
@@ -922,23 +1091,35 @@ function updateCourseBulkBar() {
   const count = state.selectedCourseIds.size;
   document.getElementById('course-selected-count').textContent = count;
   bar.classList.toggle('hidden', count === 0);
-  // Only offer the actions relevant to what's actually selected/viewed.
   const view = state.courseView;
   document.querySelector('.bulk-archive-btn').classList.toggle('hidden', view === 'archived');
   document.querySelector('.bulk-unarchive-btn').classList.toggle('hidden', view !== 'archived');
 }
 
+function showWorkspaceEmpty() {
+  document.getElementById('workspace-empty').classList.remove('hidden');
+  document.getElementById('workspace-loaded').classList.add('hidden');
+}
+function showWorkspaceLoaded() {
+  document.getElementById('workspace-empty').classList.add('hidden');
+  document.getElementById('workspace-loaded').classList.remove('hidden');
+}
+
 async function fetchCourseMembers(courseId) {
+  showWorkspaceLoaded();
+  const course = state.courses.find(c => getCourseId(c) === courseId);
+  document.getElementById('workspace-course-name').textContent = course ? getCourseName(course) : courseId;
+  document.getElementById('workspace-course-id').textContent = courseId;
   document.getElementById('teachers-loading').classList.remove('hidden');
   document.getElementById('students-loading').classList.remove('hidden');
-  ['btn-open-add-teacher','btn-open-add-student','btn-open-enroll-ou','btn-export-grades','btn-export-topics'].forEach(id => document.getElementById(id).disabled = true);
+  ['btn-open-add-teacher','btn-open-add-student','btn-export-grades','btn-export-topics'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
   try {
     const data = await apiGet({ action: 'getCourseMembers', courseId });
     state.teachers = data.teachers || [];
     state.students = data.students || [];
     state.selectedStudentIds.clear();
     renderMembers();
-    ['btn-open-add-teacher','btn-open-add-student','btn-open-enroll-ou','btn-export-grades','btn-export-topics'].forEach(id => document.getElementById(id).disabled = false);
+    ['btn-open-add-teacher','btn-open-add-student','btn-export-grades','btn-export-topics'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
   } catch (err) {
     state.teachers = []; state.students = [];
     renderMembers();
@@ -950,6 +1131,17 @@ async function fetchCourseMembers(courseId) {
   }
 }
 
+function filteredSortedStudents() {
+  const q = state.studentSearchQuery.trim().toLowerCase();
+  let list = state.students.slice();
+  if (q) list = list.filter(s => getMemberName(s).toLowerCase().includes(q) || getMemberEmail(s).toLowerCase().includes(q));
+  list.sort((a, b) => {
+    const av = getMemberName(a).toLowerCase(), bv = getMemberName(b).toLowerCase();
+    return state.studentSort === 'name_desc' ? bv.localeCompare(av) : av.localeCompare(bv);
+  });
+  return list;
+}
+
 function renderMembers() {
   document.getElementById('teachers-count').textContent = state.teachers.length;
   document.getElementById('students-count').textContent = state.students.length;
@@ -959,8 +1151,9 @@ function renderMembers() {
     : `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No teachers found for this course.' : 'Load a course to see its teachers.'}</li>`;
 
   const studentsList = document.getElementById('students-list');
-  studentsList.innerHTML = state.students.length ? state.students.map(s => memberRow(s, 'student')).join('')
-    : `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No students found for this course.' : 'Load a course to see its students.'}</li>`;
+  const visibleStudents = filteredSortedStudents();
+  studentsList.innerHTML = visibleStudents.length ? visibleStudents.map(s => memberRow(s, 'student')).join('')
+    : `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No students match.' : 'Load a course to see its students.'}</li>`;
 
   document.querySelectorAll('.remove-member-btn').forEach(btn => btn.addEventListener('click', () => confirmRemoveMember(btn.dataset.email, btn.dataset.role)));
   document.querySelectorAll('.make-primary-btn').forEach(btn => btn.addEventListener('click', () => confirmMakePrimary(btn.dataset.email)));
@@ -1068,29 +1261,93 @@ function openCreateCourseModal() {
   });
 }
 
+// Bulk Create — Excel/CSV upload to create classrooms, assign primary
+// teachers, and enroll students in bulk. Parses the file locally to show a
+// preview, then hands the raw file to a bulkCreateCoursesFromFile action.
+function openBulkCreateModal() {
+  openModal(modalShell('Bulk create classrooms', `
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Upload an Excel/CSV file with columns for classroom name, section, room, primary teacher email, and student emails. Each row becomes one classroom.</p>
+    <label class="flex flex-col items-center justify-center gap-2 border border-dashed border-[var(--line)] rounded-lg py-8 cursor-pointer hover:border-[var(--ink-faint)] transition">
+      <span class="w-6 h-6 text-[var(--ink-faint)]">${ICONS.upload}</span>
+      <span class="text-sm text-[var(--ink-soft)]">Click to choose a .csv or .xlsx file</span>
+      <input id="bulk-file-input" type="file" accept=".csv,.xlsx,.xls" class="hidden">
+    </label>
+    <p id="bulk-file-name" class="text-xs text-[var(--ink-faint)] mt-2"></p>
+  `, 'Upload &amp; create', 'bg-[var(--good)] hover:opacity-90'));
+  const fileInput = document.getElementById('bulk-file-input');
+  let picked = null;
+  fileInput.addEventListener('change', () => {
+    picked = fileInput.files[0] || null;
+    document.getElementById('bulk-file-name').textContent = picked ? `Selected: ${picked.name}` : '';
+  });
+  wireModalButtons(async () => {
+    if (!picked) { showToast('Choose a file first.', 'error'); return; }
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Uploading…');
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(picked);
+      });
+      const data = await apiPost({ action: 'bulkCreateCoursesFromFile', fileName: picked.name, fileBase64: base64 }, 180000);
+      showToast(data?.message || 'Bulk import submitted.', 'success');
+      closeModal();
+      fetchCourses(true);
+    } catch (err) {
+      showToast(err.message || 'Bulk import failed', 'error');
+      resetButtonLoading(btn, 'Upload &amp; create');
+    }
+  });
+}
+
+// Dynamic teacher assignment: defaults to setting the primary teacher when
+// the course has none yet; otherwise pre-fills the current primary and
+// offers an "Add co-teacher" flow.
 function openAddTeacherModal() {
+  const primary = state.teachers.find(t => t.isPrimary);
+  const primaryEmail = primary ? getMemberEmail(primary) : '';
   openModal(modalShell('Assign teacher', `
-    <p class="text-sm text-[var(--ink-soft)] mb-3">Add a co-teacher to course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
-    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Teacher email</label>
-    <div class="relative">
-      <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
-      <input id="teacher-email-input" type="email" placeholder="teacher@school.edu" class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
-    </div>
-  `, 'Add teacher'));
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Course <span class="font-medium">${escapeHtml(state.courseId)}</span></p>
+    ${primary ? `
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Primary teacher</label>
+      <input type="text" value="${escapeHtml(getMemberName(primary))} · ${escapeHtml(primaryEmail)}" disabled class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm mb-3 opacity-70">
+      <button type="button" id="at-add-co" class="text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 mb-2 focus-ring">+ Add co-teacher</button>
+      <div id="at-co-panel" class="hidden">
+        <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Co-teacher email</label>
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
+          <input id="teacher-email-input" type="email" placeholder="teacher@school.edu" class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
+        </div>
+      </div>
+    ` : `
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Primary teacher email</label>
+      <div class="relative">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
+        <input id="teacher-email-input" type="email" placeholder="teacher@school.edu" class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
+      </div>
+    `}
+  `, primary ? 'Add co-teacher' : 'Set primary teacher'));
+  if (primary) {
+    const coBtn = document.getElementById('at-add-co'), coPanel = document.getElementById('at-co-panel');
+    coBtn.addEventListener('click', () => { coPanel.classList.remove('hidden'); coBtn.classList.add('hidden'); document.getElementById('teacher-email-input').focus(); });
+  }
   wireModalButtons(async () => {
     const input = document.getElementById('teacher-email-input');
-    const email = input.value.trim();
-    if (!email) { input.focus(); return; }
+    const email = input ? input.value.trim() : '';
+    if (!email) { if (input) input.focus(); return; }
     const btn = document.getElementById('modal-submit');
-    setButtonLoading(btn, 'Adding…');
+    setButtonLoading(btn, 'Working…');
     try {
       await apiPost({ action: 'addTeacher', courseId: state.courseId, teacherEmail: email });
-      showToast(`${email} added as a teacher.`, 'success');
+      if (!primary) await apiPost({ action: 'setPrimaryTeacher', courseId: state.courseId, teacherEmail: email });
+      showToast(`${email} ${primary ? 'added as a co-teacher' : 'set as primary teacher'}.`, 'success');
       closeModal();
       fetchCourseMembers(state.courseId);
     } catch (err) {
-      showToast(err.message || 'Failed to add teacher', 'error');
-      resetButtonLoading(btn, 'Add teacher');
+      showToast(err.message || 'Failed to assign teacher', 'error');
+      resetButtonLoading(btn, primary ? 'Add co-teacher' : 'Set primary teacher');
     }
   });
 }
@@ -1114,67 +1371,89 @@ function confirmMakePrimary(email) {
   });
 }
 
+// Add students — "By Student" (autocomplete search over the currently
+// loaded OU roster + any users already fetched) and "By Class Group"
+// (mapped in Settings) using bulkAddStudentsByOU under the hood.
 function openAddStudentModal() {
   openModal(modalShell('Enroll student(s)', `
     <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll into course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
     <div class="flex gap-1 mb-3 p-1 bg-[var(--paper)] rounded-lg w-fit">
-      <button type="button" id="as-tab-email" class="seg-btn is-active text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By email</button>
-      <button type="button" id="as-tab-ou" class="seg-btn text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By OU</button>
+      <button type="button" id="as-tab-student" class="seg-btn is-active text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By Student</button>
+      <button type="button" id="as-tab-group" class="seg-btn text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By Class Group</button>
     </div>
-    <div id="as-panel-email">
-      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Student email(s) — one per line, or comma-separated</label>
+    <div id="as-panel-student">
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Search students</label>
+      <div class="relative">
+        <input id="as-student-search" type="text" autocomplete="off" placeholder="Start typing a name or email…" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+        <div id="as-student-suggestions" class="hidden absolute z-10 left-0 right-0 mt-1 bg-[var(--panel)] border border-[var(--line)] rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+      </div>
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mt-3 mb-1">Selected students — one per line, or comma-separated</label>
       <textarea id="student-emails-input" rows="4" placeholder="student1@school.edu&#10;student2@school.edu" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring font-mono"></textarea>
     </div>
-    <div id="as-panel-ou" class="hidden">
-      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Organizational Unit</label>
-      <select id="as-ou-select" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
-        <option value="">Select an organizational unit…</option>
-        ${state.ous.map(ou => `<option value="${escapeHtml(ou.orgUnitPath)}">${escapeHtml(ou.name || ou.orgUnitPath)}</option>`).join('')}
+    <div id="as-panel-group" class="hidden">
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Class Group</label>
+      <select id="as-group-select" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+        <option value="">Select a class group…</option>
+        ${state.ouMappings.map(m => `<option value="${escapeHtml(m.orgUnitPath)}">${escapeHtml(m.label)}</option>`).join('')}
       </select>
-      <p class="text-xs text-[var(--ink-faint)] mt-2">Every user in this OU will be enrolled as a student.</p>
+      <p class="text-xs text-[var(--ink-faint)] mt-2">${state.ouMappings.length ? 'Every student belonging to this Class Group\u2019s OU will be enrolled.' : 'No Class Groups configured yet — add one under Settings.'}</p>
     </div>
-    <p id="as-hint" class="hidden text-xs text-[var(--ink-soft)] mt-3"></p>
   `, 'Enroll', 'bg-[var(--good)] hover:opacity-90'));
-  const tabEmail = document.getElementById('as-tab-email'), tabOu = document.getElementById('as-tab-ou');
-  const panelEmail = document.getElementById('as-panel-email'), panelOu = document.getElementById('as-panel-ou');
-  let mode = 'email';
-  tabEmail.addEventListener('click', () => { mode = 'email'; tabEmail.classList.add('is-active'); tabOu.classList.remove('is-active'); panelEmail.classList.remove('hidden'); panelOu.classList.add('hidden'); });
-  tabOu.addEventListener('click', () => { mode = 'ou'; tabOu.classList.add('is-active'); tabEmail.classList.remove('is-active'); panelOu.classList.remove('hidden'); panelEmail.classList.add('hidden'); });
+
+  const tabStudent = document.getElementById('as-tab-student'), tabGroup = document.getElementById('as-tab-group');
+  const panelStudent = document.getElementById('as-panel-student'), panelGroup = document.getElementById('as-panel-group');
+  let mode = 'student';
+  tabStudent.addEventListener('click', () => { mode = 'student'; tabStudent.classList.add('is-active'); tabGroup.classList.remove('is-active'); panelStudent.classList.remove('hidden'); panelGroup.classList.add('hidden'); });
+  tabGroup.addEventListener('click', () => { mode = 'group'; tabGroup.classList.add('is-active'); tabStudent.classList.remove('is-active'); panelGroup.classList.remove('hidden'); panelStudent.classList.add('hidden'); });
+
+  // Autocomplete over whatever roster is already in memory (OU tab fetches).
+  const searchInput = document.getElementById('as-student-search');
+  const suggestBox = document.getElementById('as-student-suggestions');
+  const emailsBox = document.getElementById('student-emails-input');
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) { suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; return; }
+    const matches = state.users.filter(u => getUserName(u).toLowerCase().includes(q) || getUserEmail(u).toLowerCase().includes(q)).slice(0, 8);
+    if (!matches.length) { suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; return; }
+    suggestBox.innerHTML = matches.map(u => `<div class="as-suggestion px-3 py-2 text-sm hover:bg-[var(--panel-2)] cursor-pointer" data-email="${escapeHtml(getUserEmail(u))}">${escapeHtml(getUserName(u))} <span class="text-xs text-[var(--ink-faint)] font-mono">${escapeHtml(getUserEmail(u))}</span></div>`).join('');
+    suggestBox.classList.remove('hidden');
+    suggestBox.querySelectorAll('.as-suggestion').forEach(row => row.addEventListener('click', () => {
+      const email = row.dataset.email;
+      const existing = emailsBox.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+      if (!existing.includes(email)) existing.push(email);
+      emailsBox.value = existing.join('\n');
+      searchInput.value = ''; suggestBox.classList.add('hidden'); suggestBox.innerHTML = '';
+    }));
+  });
 
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
-    const hint = document.getElementById('as-hint');
-    if (mode === 'email') {
-      const raw = document.getElementById('student-emails-input').value;
-      const emails = raw.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
-      if (!emails.length) { showToast('Enter at least one email.', 'error'); return; }
+    if (mode === 'student') {
+      const raw = emailsBox.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+      if (!raw.length) { emailsBox.focus(); return; }
       setButtonLoading(btn, 'Enrolling…');
       try {
-        const data = await apiPost({ action: 'bulkAddStudents', courseId: state.courseId, studentEmails: emails });
+        const data = await apiPost({ action: 'bulkAddStudents', courseId: state.courseId, studentEmails: raw });
         const r = data.results;
         closeModal();
         if (!r.failed.length) showToast(`Enrolled ${r.ok.length} student(s).`, 'success');
-        else showToast(`Enrolled ${r.ok.length}; ${r.failed.length} failed (${r.failed.map(f => f.email).join(', ')}).`, 'error');
+        else showToast(`Enrolled ${r.ok.length}; ${r.failed.length} failed.`, 'error');
         fetchCourseMembers(state.courseId);
       } catch (err) {
         showToast(err.message || 'Failed to enroll students', 'error');
         resetButtonLoading(btn, 'Enroll');
       }
     } else {
-      const orgUnitPath = document.getElementById('as-ou-select').value;
-      if (!orgUnitPath) { showToast('Select an OU first.', 'error'); return; }
+      const orgUnitPath = document.getElementById('as-group-select').value;
+      if (!orgUnitPath) return;
       setButtonLoading(btn, 'Enrolling…');
-      hint.textContent = 'This can take a while for large OUs…';
-      hint.classList.remove('hidden');
       try {
         const data = await apiPost({ action: 'bulkAddStudentsByOU', courseId: state.courseId, orgUnitPath }, 180000);
-        const r = data.results;
         closeModal();
-        if (!r.failed.length) showToast(`Enrolled ${r.ok.length} student(s) from this OU.`, 'success');
-        else showToast(`Enrolled ${r.ok.length}; ${r.failed.length} failed (already enrolled or non-students).`, 'error');
+        showToast(`Enrolled ${data?.results?.ok?.length ?? 'the'} student(s) from this Class Group.`, 'success');
         fetchCourseMembers(state.courseId);
       } catch (err) {
-        showToast(err.message || 'Failed to enroll OU', 'error');
+        showToast(err.message || 'Failed to enroll by class group', 'error');
         resetButtonLoading(btn, 'Enroll');
       }
     }
@@ -1182,23 +1461,19 @@ function openAddStudentModal() {
 }
 
 function confirmRemoveMember(email, role) {
-  const label = role === 'teacher' ? 'teacher' : 'student';
-  openModal(modalShell(`Remove ${label}`, `
-    <p class="text-sm text-[var(--ink-soft)]">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(state.courseId)}</span>? This can't be undone from here.</p>
-  `, 'Remove', 'bg-[var(--bad)] hover:opacity-90'));
+  const action = role === 'teacher' ? 'removeTeacher' : 'removeStudent';
+  openModal(modalShell('Remove member', `<p class="text-sm text-[var(--ink-soft)]">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(state.courseId)}</span>?</p>`, 'Remove', 'bg-[var(--bad)] hover:opacity-90'));
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
     setButtonLoading(btn, 'Removing…');
     try {
-      const action = role === 'teacher' ? 'removeTeacher' : 'removeStudent';
-      const payload = { action, courseId: state.courseId };
-      if (role === 'teacher') payload.teacherEmail = email; else payload.studentEmail = email;
+      const payload = { action, courseId: state.courseId, [role === 'teacher' ? 'teacherEmail' : 'studentEmail']: email };
       await apiPost(payload);
-      showToast(`${email} removed from the course.`, 'success');
+      showToast(`${email} removed.`, 'success');
       closeModal();
       fetchCourseMembers(state.courseId);
     } catch (err) {
-      showToast(err.message || `Failed to remove ${label}`, 'error');
+      showToast(err.message || 'Failed to remove member', 'error');
       resetButtonLoading(btn, 'Remove');
     }
   });
@@ -1206,19 +1481,15 @@ function confirmRemoveMember(email, role) {
 
 function confirmBulkRemoveStudents() {
   const emails = Array.from(state.selectedStudentIds);
-  openModal(modalShell('Remove selected students', `
-    <p class="text-sm text-[var(--ink-soft)]">Remove ${emails.length} student(s) from course <span class="font-medium">${escapeHtml(state.courseId)}</span>?</p>
-  `, 'Remove all', 'bg-[var(--bad)] hover:opacity-90'));
+  if (!emails.length) return;
+  openModal(modalShell('Remove students', `<p class="text-sm text-[var(--ink-soft)]">Remove ${emails.length} selected student(s) from this course?</p>`, 'Remove all', 'bg-[var(--bad)] hover:opacity-90'));
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
     setButtonLoading(btn, 'Removing…');
     try {
       const data = await apiPost({ action: 'bulkRemoveStudents', courseId: state.courseId, studentEmails: emails });
-      const r = data.results;
       closeModal();
-      if (!r.failed.length) showToast(`Removed ${r.ok.length} student(s).`, 'success');
-      else showToast(`Removed ${r.ok.length}; ${r.failed.length} failed.`, 'error');
-      state.selectedStudentIds.clear();
+      showToast(`Removed ${data?.results?.ok?.length ?? emails.length} student(s).`, 'success');
       fetchCourseMembers(state.courseId);
     } catch (err) {
       showToast(err.message || 'Failed to remove students', 'error');
@@ -1227,31 +1498,21 @@ function confirmBulkRemoveStudents() {
   });
 }
 
-function openEnrollByOUModal() {
-  // Same underlying action as the "By OU" tab in openAddStudentModal — kept as
-  // its own button/entry point on the toolbar since it's the common path.
-  openAddStudentModal();
-  document.getElementById('as-tab-ou').click();
-}
-
 function confirmBulkCourseOp(action, label, verb) {
   const ids = Array.from(state.selectedCourseIds);
-  openModal(modalShell(label, `
-    <p class="text-sm text-[var(--ink-soft)]">${verb} ${ids.length} classroom(s)? ${action === 'bulkDeleteCourses' ? 'Deleted classrooms cannot be recovered from this tool.' : ''}</p>
-  `, label, action === 'bulkDeleteCourses' ? 'bg-[var(--bad)] hover:opacity-90' : 'bg-[var(--warn)] hover:opacity-90'));
+  if (!ids.length) return;
+  openModal(modalShell(`${verb} classrooms`, `<p class="text-sm text-[var(--ink-soft)]">${verb} ${ids.length} selected classroom(s)?</p>`, label, action === 'bulkDeleteCourses' ? 'bg-[var(--bad)] hover:opacity-90' : (action === 'bulkArchiveCourses' ? 'bg-[var(--warn)] hover:opacity-90' : 'btn-primary')));
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
     setButtonLoading(btn, 'Working…');
     try {
       const data = await apiPost({ action, courseIds: ids }, 120000);
-      const r = data.results;
       closeModal();
-      if (!r.failed.length) showToast(`${label} succeeded for ${r.ok.length} classroom(s).`, 'success');
-      else showToast(`${r.ok.length} succeeded; ${r.failed.length} failed.`, 'error');
+      showToast(`${verb} succeeded for ${data?.results?.ok?.length ?? ids.length} classroom(s).`, 'success');
       state.selectedCourseIds.clear();
       fetchCourses(true);
     } catch (err) {
-      showToast(err.message || 'Bulk action failed', 'error');
+      showToast(err.message || `${verb} failed`, 'error');
       resetButtonLoading(btn, label);
     }
   });
@@ -1259,13 +1520,10 @@ function confirmBulkCourseOp(action, label, verb) {
 
 function setButtonLoading(btn, label) {
   btn.disabled = true;
-  btn.innerHTML = `<span class="w-4 h-4 animate-spin inline-block align-[-3px]">${ICONS.spinner}</span> ${label}`;
+  btn.innerHTML = `<span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 animate-spin inline-block">${ICONS.spinner}</span>${label}</span>`;
 }
 function resetButtonLoading(btn, label) { btn.disabled = false; btn.innerHTML = label; }
 
-/* ============================================================
-   EXPORTS
-   ============================================================ */
 async function exportGrades() {
   if (!state.courseId) return;
   const btn = document.getElementById('btn-export-grades');
@@ -1275,7 +1533,7 @@ async function exportGrades() {
     downloadText(data.filename, data.csv);
     showToast('Grades exported.', 'success');
   } catch (err) {
-    showToast(err.message || 'Failed to export grades', 'error');
+    showToast(err.message || 'Failed to export', 'error');
   } finally {
     resetButtonLoading(btn, `<span class="w-3.5 h-3.5 inline-block align-[-3px] mr-1">${ICONS.download}</span>Export grades`);
     icon(document.getElementById('icon-export-grades'), 'download');
@@ -1298,43 +1556,82 @@ async function exportTopics() {
 }
 
 /* ============================================================
+   VIEW: SETTINGS
+   ============================================================ */
+async function loadSettingsData() {
+  const [mappingsData, settingsData, usersData] = await Promise.all([
+    apiGetOptional({ action: 'getOuMappings' }),
+    apiGetOptional({ action: 'getAppSettings' }),
+    apiGetOptional({ action: 'getAppUsers' }),
+  ]);
+  if (mappingsData) state.ouMappings = mappingsData.mappings || [];
+  if (settingsData) state.appSettings = { staffOU: settingsData.staffOU || '', studentParentOU: settingsData.studentParentOU || '' };
+  if (usersData) state.appUsers = usersData.users || [];
+  renderSettingsView();
+}
+function renderSettingsView() {
+  populateOuDependentSelects();
+  renderMappingsList();
+  renderAppUsersList();
+}
+function renderMappingsList() {
+  const list = document.getElementById('mappings-list');
+  if (!state.ouMappings.length) { list.innerHTML = `<li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No class group mappings yet.</li>`; return; }
+  list.innerHTML = state.ouMappings.map(m => `
+    <li class="px-3 py-2.5 flex items-center gap-2 text-sm">
+      <span class="font-medium">${escapeHtml(m.label)}</span>
+      <span class="text-xs text-[var(--ink-faint)] font-mono truncate">${escapeHtml(m.orgUnitPath)}</span>
+    </li>`).join('');
+}
+function renderAppUsersList() {
+  const list = document.getElementById('app-users-list');
+  if (!state.appUsers.length) { list.innerHTML = `<li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No app users loaded.</li>`; return; }
+  const roleLabel = { superadmin: 'Super admin', admin: 'Admin', dept_head: 'Department head', auditor: 'Auditor' };
+  list.innerHTML = state.appUsers.map(u => `
+    <li class="px-3 py-2.5 flex items-center gap-2 text-sm">
+      <span class="font-mono text-xs flex-1 truncate">${escapeHtml(u.email)}</span>
+      <span class="text-xs font-medium bg-[var(--accent-tint)] text-[var(--accent-ink)] rounded-full px-2 py-0.5">${escapeHtml(roleLabel[u.role] || u.role)}</span>
+    </li>`).join('');
+}
+
+/* ============================================================
    WIRE UP
    ============================================================ */
 function boot() {
   icon(document.getElementById('icon-logo'), 'logo');
-  icon(document.getElementById('icon-logo-mobile'), 'logo');
-  icon(document.getElementById('nav-icon-ou'), 'users');
-  icon(document.getElementById('nav-icon-classroom'), 'book');
+  icon(document.getElementById('icon-logo-login'), 'logo');
+  icon(document.getElementById('rail-icon-summary'), 'gauge');
+  icon(document.getElementById('rail-icon-roster'), 'users');
+  icon(document.getElementById('rail-icon-classrooms'), 'book');
+  icon(document.getElementById('rail-icon-settings'), 'gear');
   icon(document.getElementById('ou-chevron'), 'chevronDown');
   icon(document.getElementById('icon-refresh-ous'), 'refresh');
   icon(document.getElementById('icon-search'), 'search');
-  icon(document.getElementById('icon-search-course'), 'search');
+  icon(document.getElementById('icon-search-students'), 'search');
   icon(document.getElementById('icon-enroll-selected'), 'plus');
   icon(document.getElementById('icon-spinner-users'), 'spinner');
   icon(document.getElementById('icon-add-teacher'), 'plus');
   icon(document.getElementById('icon-add-student'), 'plus');
   icon(document.getElementById('icon-create-course'), 'plus');
+  icon(document.getElementById('icon-bulk-create'), 'upload');
   icon(document.getElementById('icon-export-grades'), 'download');
   icon(document.getElementById('icon-export-topics'), 'download');
   icon(document.getElementById('icon-teachers-header'), 'user');
   icon(document.getElementById('icon-students-header'), 'users');
   icon(document.getElementById('icon-spinner-teachers'), 'spinner');
   icon(document.getElementById('icon-spinner-students'), 'spinner');
-  icon(document.getElementById('icon-courses-header'), 'book');
   icon(document.getElementById('icon-search-courses'), 'search');
   icon(document.getElementById('icon-refresh-courses'), 'refresh');
   icon(document.getElementById('course-sort-chevron'), 'chevronDown');
   icon(document.getElementById('icon-spinner-courses'), 'spinner');
-  icon(document.getElementById('icon-enroll-ou'), 'building');
-  icon(document.getElementById('icon-logo-login'), 'logo');
+  icon(document.getElementById('icon-drawer-toggle'), 'chevronLeft');
 
-  setActiveTab('ou');
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
+  setActiveView('summary');
+  document.querySelectorAll('.rail-view-btn').forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
 
   document.getElementById('btn-sign-out').addEventListener('click', signOut);
-  document.getElementById('btn-sign-out-mobile').addEventListener('click', signOut);
 
-  // Tab 1
+  // Roster (Students & Staff)
   document.getElementById('ou-select').addEventListener('change', (e) => {
     state.selectedOU = e.target.value;
     if (state.selectedOU) fetchUsersByOU(state.selectedOU);
@@ -1349,7 +1646,6 @@ function boot() {
   });
   document.getElementById('btn-clear-selection').addEventListener('click', () => { state.selectedUserIds.clear(); renderUserTable(); updateSelectionBar(); });
   document.getElementById('btn-enroll-selected').addEventListener('click', () => {
-    // Reuses the course-scoped bulkAddStudents endpoint by prompting for a course ID first.
     openModal(modalShell('Enroll selected students', `
       <p class="text-sm text-[var(--ink-soft)] mb-3">${state.selectedUserIds.size} student(s) selected. Enter the destination course ID.</p>
       <input id="bulk-course-id-input" type="text" placeholder="e.g. 123456789012" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
@@ -1372,24 +1668,17 @@ function boot() {
     });
   });
 
-  // Tab 2
-  document.getElementById('btn-load-course').addEventListener('click', () => {
-    const id = document.getElementById('course-id-input').value.trim();
-    if (!id) { showToast('Enter a course ID first.', 'error'); return; }
-    state.courseId = id;
-    fetchCourseMembers(id);
-  });
-  document.getElementById('course-id-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('btn-load-course').click(); });
+  // Manage Classrooms
   document.getElementById('btn-open-create-course').addEventListener('click', openCreateCourseModal);
   document.getElementById('btn-open-add-teacher').addEventListener('click', openAddTeacherModal);
   document.getElementById('btn-open-add-student').addEventListener('click', openAddStudentModal);
-  document.getElementById('btn-open-enroll-ou').addEventListener('click', openEnrollByOUModal);
+  document.getElementById('btn-bulk-create').addEventListener('click', openBulkCreateModal);
   document.getElementById('btn-export-grades').addEventListener('click', exportGrades);
   document.getElementById('btn-export-topics').addEventListener('click', exportTopics);
   document.getElementById('course-search').addEventListener('input', (e) => { state.courseSearchQuery = e.target.value; applyCourseFilter(); });
   document.getElementById('course-sort').value = state.courseSort;
   document.getElementById('course-sort').addEventListener('change', (e) => { state.courseSort = e.target.value; applyCourseFilter(); });
-  document.getElementById('btn-refresh-courses').addEventListener('click', () => fetchCourses(true));
+  document.getElementById('btn-refresh-drawer').addEventListener('click', () => fetchCourses(true));
   document.getElementById('btn-bulk-archive').addEventListener('click', () => confirmBulkCourseOp('bulkArchiveCourses', 'Archive', 'Archive'));
   document.getElementById('btn-bulk-unarchive').addEventListener('click', () => confirmBulkCourseOp('bulkUnarchiveCourses', 'Unarchive', 'Unarchive'));
   document.getElementById('btn-bulk-delete').addEventListener('click', () => confirmBulkCourseOp('bulkDeleteCourses', 'Delete', 'Permanently delete'));
@@ -1399,9 +1688,60 @@ function boot() {
     renderMembers();
   });
   document.getElementById('btn-bulk-remove-students').addEventListener('click', confirmBulkRemoveStudents);
+  document.getElementById('student-search').addEventListener('input', (e) => { state.studentSearchQuery = e.target.value; renderMembers(); });
+  document.getElementById('student-sort').addEventListener('change', (e) => { state.studentSort = e.target.value; renderMembers(); });
+  document.getElementById('drawer-toggle').addEventListener('click', () => {
+    state.drawerCollapsed = !state.drawerCollapsed;
+    document.getElementById('classroom-drawer').classList.toggle('collapsed', state.drawerCollapsed);
+    icon(document.getElementById('icon-drawer-toggle'), state.drawerCollapsed ? 'chevronRight' : 'chevronLeft');
+  });
+  showWorkspaceEmpty();
+
+  // Settings
+  document.getElementById('btn-add-mapping').addEventListener('click', async () => {
+    const orgUnitPath = document.getElementById('mapping-ou-select').value;
+    const label = document.getElementById('mapping-label-input').value.trim();
+    if (!orgUnitPath || !label) { showToast('Choose an OU and enter a label.', 'error'); return; }
+    try {
+      await apiPost({ action: 'saveOuMapping', orgUnitPath, label });
+      const existing = state.ouMappings.findIndex(m => m.orgUnitPath === orgUnitPath);
+      if (existing >= 0) state.ouMappings[existing].label = label; else state.ouMappings.push({ orgUnitPath, label });
+      renderMappingsList();
+      document.getElementById('mapping-label-input').value = '';
+      showToast('Class Group mapping saved.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to save mapping', 'error');
+    }
+  });
+  document.getElementById('btn-save-scope').addEventListener('click', async () => {
+    const staffOU = document.getElementById('setting-staff-ou').value;
+    const studentParentOU = document.getElementById('setting-student-ou').value;
+    try {
+      await apiPost({ action: 'saveAppSettings', staffOU, studentParentOU });
+      state.appSettings = { staffOU, studentParentOU };
+      showToast('Scope saved.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to save scope', 'error');
+    }
+  });
+  document.getElementById('btn-invite-user').addEventListener('click', async () => {
+    const email = document.getElementById('invite-email-input').value.trim();
+    const role = document.getElementById('invite-role-select').value;
+    if (!email) { showToast('Enter an email address.', 'error'); return; }
+    try {
+      await apiPost({ action: 'addAppUser', email, role });
+      state.appUsers.push({ email, role });
+      renderAppUsersList();
+      document.getElementById('invite-email-input').value = '';
+      showToast(`${email} added as ${role}.`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to add user', 'error');
+    }
+  });
 
   fetchOUs();
-  fetchCourses();
+  fetchCourses().then(loadOrgStats);
+  loadSettingsData();
 }
 
 window.addEventListener('load', initSignIn);
