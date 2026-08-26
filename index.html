@@ -1,1209 +1,2304 @@
-/**
- * Classroom Admin — backend (Google Apps Script)
- *
- * AUTH & RBAC MODEL
- * ------------------
- * The frontend signs users in with Google Identity Services (GIS) and sends
- * a Google-issued ID token with every request (param `idToken` on GET,
- * field `idToken` on POST body). This script verifies that token itself
- * (verifyIdToken) via Google's tokeninfo endpoint — no Firebase project,
- * no extra database service required. It then looks up the caller's role
- * in a plain Google Sheet (the "Roles" sheet — see README) and enforces
- * permissions server-side before running any action. The frontend also
- * hides/shows UI by role, but that's cosmetic only — every privileged
- * action is re-checked here, since the frontend can't be trusted.
- *
- * Roles: superadmin, admin, dept_head, auditor
- *   superadmin / admin - full access (identical permissions; superadmin is
- *                         just the label for whoever owns the Roles sheet)
- *   dept_head           - read everything; can enroll/remove students only,
- *                         and only students whose orgUnitPath is under their
- *                         assigned ouScope (set in the Roles sheet)
- *   auditor             - read-only, including exports; no mutations
- *
- * REQUIRED SETUP — see README.md.
- *
- * SETTINGS / CLASS GROUPS / APP USERS
- * ------------------------------------
- * The "Roles" spreadsheet (same file as the Roles tab) also hosts three
- * more tabs, created on first use if missing:
- *   - "OuMappings"  — columns: OrgUnitPath | Label            (Class Groups)
- *   - "AppSettings" — columns: Key | Value                    (Staff OU / Student parent OU)
- *   - "Roles"       — the existing tab is reused as the app-user directory;
- *                      Settings → User & role management reads/writes it
- *                      directly, so there's no separate "app users" table.
- * None of this touches the real Google Admin Console org structure — every
- * OU-related call below is read-only against AdminDirectory (Orgunits.list,
- * Users.list). "Class Group" labels are purely local metadata.
- *
- * CACHING
- * -------
- * Courses, org units, and the full org user directory rarely change day to
- * day (mostly at the start of the school year, or when a new student
- * enrolls mid-year), but each of them requires slow, paginated Admin/
- * Classroom API calls to rebuild — course loading in particular used to
- * make one extra AdminDirectory.Users.get() call *per distinct course
- * owner* just to resolve teacher email/active-status, which is what made
- * the first load after sign-in slow for any school with more than a
- * handful of teachers.
- *
- * Instead of re-fetching on every page load (the old CacheService-based
- * 5-minute cache), snapshots are now persisted as JSON files in a small
- * Drive folder the app creates for itself ("Classroom Admin — Cache (do
- * not delete)"). They're served as-is until something invalidates them:
- *   - Course mutations (create/archive/delete/etc.) invalidate the course
- *     cache automatically.
- *   - The org unit + user directory snapshot is only rebuilt when someone
- *     clicks "Refresh OUs" in the Roster view, or passes refresh=1
- *     explicitly — there's no automatic expiry, since the whole point is
- *     to avoid re-paying that cost on every login.
- * This also fixes a correctness bug: OU-scoped counts (Global OU scope /
- * Summary stats, dept_head ouScope enforcement for display purposes) used
- * to make one Users.list call per sub-organizational-unit, relying on the
- * Admin SDK's own orgUnitPath filter to return an exact match. In
- * practice that filter can return users from *nested* sub-OUs too (see the
- * matching client-side workaround previously needed in the frontend's
- * fetchUsersByOU), which meant a broadly-scoped OU could end up counting
- * far more users than intended. Fetching the full domain directory once
- * and filtering it locally with our own, well-defined prefix logic sidesteps
- * that ambiguity entirely — the answer no longer depends on undocumented
- * API behavior.
- */
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Google Classroom Manager | St. Mary Catholic School</title>
 
-const ROLES_SHEET_PROP = 'ROLES_SHEET_ID';
-const GIS_CLIENT_ID_PROP = 'GIS_CLIENT_ID';
-const HOSTED_DOMAIN_PROP = 'HOSTED_DOMAIN'; // optional, e.g. "yourschool.org"
+<script src="https://cdn.jsdelivr.net/npm/@unocss/runtime/uno.global.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- 'Google Sans' itself is a proprietary Google typeface not distributed on
+     Google Fonts, so it can't be @import'ed on a public page. We reference it
+     first (it renders natively on ChromeOS/Android where it's a system font)
+     and fall back to Roboto — Google's own open-source product font and the
+     closest public match — everywhere else. -->
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
 
-const ROLE_CACHE_SECONDS = 300;
+<style>
+  /* Dark, panel-based theme — green accent + Google Sans/Roboto kept from the
+     previous version. Layout is now a Micro-SaaS shell: fixed green top bar,
+     a narrow icon rail on the far left, and a scrollable content column. */
+  :root{
+    /* Light, card-based theme: soft green gradient page background, white
+       cards, green primary + yellow accent — recolored from a blue/white
+       reference dashboard. */
+    --bg:#eef8f1;
+    --panel:#ffffff;
+    --panel-2:#f2faf5;
+    --field-bg:#ffffff;
+    --line:#e0ede4;
+    --ink:#182a20;
+    --ink-soft:#57685f;
+    --ink-faint:#8b9a91;
+    --accent:#2ca15f;
+    --accent-ink:#1f7d49;
+    --accent-tint:rgba(44,161,95,.10);
+    --good:#2ca15f;
+    --good-tint:rgba(44,161,95,.10);
+    --bad:#c94a41;
+    --bad-tint:rgba(201,74,65,.08);
+    --warn:#c97a2e;
+    --warn-tint:rgba(201,122,46,.10);
+    --header-h:56px;
+    --rail-w:88px;
+    --yellow:#ffc200;
+    --yellow-ink:#8a6400;
+    --yellow-tint:rgba(255,194,0,.16);
+    --yellow-tint-strong:rgba(255,194,0,.26);
+    --card-shadow:0 1px 2px rgba(24,42,32,.04), 0 6px 20px rgba(24,42,32,.07);
+    /* legacy aliases so unchanged markup below keeps working */
+    --paper:#f6fbf8;
+    --card:var(--panel);
+  }
+  *{ box-sizing:border-box; }
+  *{ scrollbar-width:thin; scrollbar-color:rgba(24,42,32,.18) transparent; }
+  html,body{
+    font-family:'Google Sans','Google Sans Text',Roboto,system-ui,Arial,sans-serif; color:var(--ink); line-height:1.3;
+    background:linear-gradient(160deg, #f3fcf6 0%, #e0f5e7 40%, #c7ecd4 75%, #aee0c1 100%);
+    background-attachment:fixed;
+  }
+  h1,h2,h3,p{ line-height:1.25; margin:0; }
+  .font-mono{ font-family:'Roboto Mono', ui-monospace, monospace; }
+  /* Remove bullet markers from every list in the app — plain UL/OL are used
+     purely as row containers (courses, students, teachers, mappings, etc.),
+     never as literal bulleted lists. */
+  ul, ol{ list-style:none; margin:0; padding:0; }
+  /* UnoCSS's text-{size} utilities each ship their own (fairly loose)
+     companion line-height, which reads as an oversized gap between lines
+     regardless of the line-height set on html/body/h1-3/p above, since the
+     utility classes have equal-or-higher specificity and are injected after
+     this stylesheet. Tighten them explicitly so type sits close together. */
+  .text-xs{ line-height:1.35 !important; }
+  .text-sm{ line-height:1.4 !important; }
+  .text-base{ line-height:1.35 !important; }
+  .text-lg{ line-height:1.3 !important; }
+  .text-xl{ line-height:1.28 !important; }
+  .text-2xl{ line-height:1.22 !important; }
+  .text-\[10px\]{ line-height:1.35 !important; }
+  .text-\[\.65rem\]{ line-height:1.35 !important; }
+  .text-\[\.68rem\]{ line-height:1.35 !important; }
+  .text-\[\.72rem\]{ line-height:1.35 !important; }
+  /* Explicit leading-* utilities express real intent (tightly-stacked
+     title/subtitle pairs, etc.) and must win over the blanket text-size
+     overrides above — otherwise something like "leading-none" on a header
+     title gets silently pried back open to 1.4 line-height. Redeclared
+     here, after the text-size rules, so the (equal-specificity, both
+     !important) tie resolves in their favor. */
+  .leading-none{ line-height:1 !important; }
+  .leading-tight{ line-height:1.15 !important; }
+  .leading-snug{ line-height:1.25 !important; }
+  .leading-relaxed{ line-height:1.5 !important; }
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{ background:rgba(24,42,32,.16); border-radius:10px; border:3px solid transparent; background-clip:content-box; }
+  ::-webkit-scrollbar-thumb:hover{ background:rgba(24,42,32,.3); background-clip:content-box; }
+  .fade-in{ animation:fadeIn .16s ease-out; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);} }
+  .toast-in{ animation:toastIn .22s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes toastIn{ from{opacity:0; transform:translateX(24px);} to{opacity:1; transform:translateX(0);} }
+  .hidden.flex,.hidden.grid{ display:none !important; }
+  [v-cloak]{ display:none; }
+  .surface{ background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--card-shadow); }
+  .pill-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
+  .pill-btn.is-active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .focus-ring:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 
-const VALID_ROLES = ['superadmin', 'admin', 'dept_head', 'auditor'];
+  /* ---- Translucent / frosted button system ----
+     One consistent glassy treatment for every button in the app instead of
+     a mix of flat borders, solid squares, and one-off colors: a frosted
+     primary (accent tint + blur) and a frosted ghost/icon variant (neutral
+     tint + blur) that both sit on top of the soft green page gradient. */
+  .btn-primary{
+    background:rgba(44,161,95,.88); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.35); color:#fff; font-weight:600;
+    box-shadow:0 1px 2px rgba(24,42,32,.06), 0 6px 16px rgba(44,161,95,.18);
+  }
+  .btn-primary:hover{ background:rgba(44,161,95,.98); }
+  .btn-primary:disabled{ opacity:.55; }
+
+  .btn-ghost{
+    background:rgba(255,255,255,.55); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(224,237,228,.9); color:var(--ink-soft);
+  }
+  .btn-ghost:hover{ background:rgba(255,255,255,.82); color:var(--ink); border-color:rgba(139,154,145,.6); }
+  .btn-ghost:disabled{ opacity:.5; }
+
+  .btn-icon-tint{
+    background:rgba(44,161,95,.14); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(44,161,95,.22); color:var(--accent-ink);
+  }
+  .btn-icon-tint:hover{ background:rgba(44,161,95,.24); }
+  .btn-icon-tint:disabled{ opacity:.5; }
+
+  .btn-icon-neutral{
+    background:rgba(255,255,255,.55); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(224,237,228,.9); color:var(--ink-soft);
+  }
+  .btn-icon-neutral:hover{ background:rgba(255,255,255,.85); color:var(--ink); }
+
+  /* Modal action-button variants — same frosted treatment as everything
+     else, just tinted by intent (confirm / destructive / caution) instead
+     of a solid saturated fill with hard-to-read text on top. */
+  .btn-tint-good{
+    background:rgba(44,161,95,.85); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.3); color:#fff; font-weight:600;
+  }
+  .btn-tint-good:hover{ background:rgba(44,161,95,.96); }
+  .btn-tint-bad{
+    background:rgba(201,74,65,.85); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.3); color:#fff; font-weight:600;
+  }
+  .btn-tint-bad:hover{ background:rgba(201,74,65,.96); }
+  .btn-tint-warn{
+    background:rgba(201,122,46,.85); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.3); color:#fff; font-weight:600;
+  }
+  .btn-tint-warn:hover{ background:rgba(201,122,46,.96); }
+
+  /* Small pill "chip" buttons — for the text-style action buttons scattered
+     through toolbars and list rows (Archive, Delete, Clear, Select all,
+     Edit, etc.) that used to just be bare colored text with a hover
+     opacity change. Same frosted language as everything else, just lighter
+     weight since these sit inline in dense rows. */
+  .btn-chip{
+    display:inline-flex; align-items:center; gap:4px;
+    padding:4px 10px; border-radius:999px; font-size:.72rem; font-weight:600;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid transparent; transition:all .15s;
+  }
+  .btn-chip-accent{ background:rgba(44,161,95,.12); border-color:rgba(44,161,95,.24); color:var(--accent-ink); }
+  .btn-chip-accent:hover{ background:rgba(44,161,95,.22); }
+  .btn-chip-warn{ background:rgba(201,122,46,.12); border-color:rgba(201,122,46,.26); color:var(--warn); }
+  .btn-chip-warn:hover{ background:rgba(201,122,46,.22); }
+  .btn-chip-bad{ background:rgba(201,74,65,.12); border-color:rgba(201,74,65,.26); color:var(--bad); }
+  .btn-chip-bad:hover{ background:rgba(201,74,65,.22); }
+  .btn-chip-neutral{ background:rgba(255,255,255,.55); border-color:rgba(224,237,228,.9); color:var(--ink-soft); }
+  .btn-chip-neutral:hover{ background:rgba(255,255,255,.85); color:var(--ink); }
+
+  /* Small translucent icon buttons for row-level destructive actions
+     (trash icons in member/mapping rows) — same idea as .btn-icon-tint but
+     red-tinted, with a visible border instead of relying on hover-only
+     background to read as a button. */
+  .btn-icon-tint-bad{
+    background:rgba(201,74,65,.1); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(201,74,65,.2); color:var(--bad);
+  }
+  .btn-icon-tint-bad:hover{ background:rgba(201,74,65,.2); }
+  .stat-card{ background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--card-shadow); position:relative; overflow:hidden; }
+  .stat-icon-badge{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; position:absolute; top:14px; right:14px; }
+  .role-hide{ display:none !important; }
+  .seg-btn{
+    color:var(--ink-soft); background:rgba(255,255,255,.55); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(224,237,228,.9);
+  }
+  .seg-btn:hover{ background:rgba(255,255,255,.85); color:var(--ink); }
+  .seg-btn.is-active{ background:rgba(44,161,95,.88); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); color:#fff; border-color:rgba(255,255,255,.35); font-weight:600; }
+
+  /* ---- Micro-SaaS header + icon rail ---- */
+  #app-header{
+    position:fixed; top:0; left:0; right:0; height:var(--header-h); z-index:60;
+    background:var(--accent); color:#fff; display:flex; align-items:center;
+    padding:0 16px; gap:10px; box-shadow:0 1px 0 rgba(0,0,0,.18);
+  }
+  #app-header .hdr-title{ font-weight:800; letter-spacing:-.01em; font-size:.95rem; line-height:1.1; color:#fff; }
+  #app-header .hdr-sub{ font-weight:600; font-size:.68rem; opacity:.85; line-height:1.1; color:#fff; }
+  #app-header img.hdr-logo{ height:30px; width:auto; display:block; object-fit:contain; }
+  #icon-rail{
+    position:fixed; top:var(--header-h); left:0; bottom:0; width:var(--rail-w); z-index:50;
+    background:rgba(255,255,255,.6); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border-right:1px solid var(--line); box-shadow:2px 0 12px rgba(24,42,32,.05);
+    display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:4px;
+  }
+  .rail-btn{
+    width:64px; height:56px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+    color:var(--ink-soft); transition:all .15s; flex-direction:column; gap:3px;
+    background:transparent; border:1px solid transparent;
+  }
+  .rail-btn span.rail-label{ font-size:.6rem; font-weight:600; letter-spacing:.01em; line-height:1; }
+  .rail-btn:hover{
+    background:rgba(255,255,255,.7); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border-color:rgba(224,237,228,.9); color:var(--ink);
+  }
+  .rail-btn.is-active{
+    background:rgba(44,161,95,.14); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border-color:rgba(44,161,95,.24); color:var(--accent-ink);
+  }
+  #app-content{ margin-left:var(--rail-w); padding-top:var(--header-h); min-height:100vh; }
+  @media (max-width: 768px){
+    :root{ --rail-w:64px; }
+    #app-header .hdr-sub{ display:none; }
+    .rail-btn span.rail-label{ display:none; }
+  }
+
+  /* form controls */
+  select, input, textarea{ background:var(--field-bg) !important; color:var(--ink) !important; }
+  select option{ background:var(--panel); color:var(--ink); }
+  input::placeholder, textarea::placeholder{ color:var(--ink-faint); }
+  .border-\[var\(--line\)\]{ border-color:var(--line) !important; }
+
+  #btn-open-create-course, #btn-export-grades, #btn-export-topics{ border-radius:999px; }
+  #btn-open-add-student, #btn-open-add-teacher{ border-radius:999px; }
+
+  .divide-y > *{ border-color:var(--line) !important; }
+  .border-b{ border-color:var(--line) !important; }
+  tr.hover\:bg-\[var\(--paper\)\]:hover, li:hover{ background:var(--panel-2) !important; }
+  .course-row:hover, tr:hover{ background:var(--panel-2); }
+  code, .font-mono{ letter-spacing:.01em; }
+
+  /* modal */
+  #modal-content{
+    background:rgba(255,255,255,.88) !important; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border:1px solid rgba(255,255,255,.6); box-shadow:0 20px 50px rgba(24,42,32,.25);
+  }
+  #modal-backdrop{ background:rgba(9,26,17,.42) !important; backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); }
+
+  /* toasts — frosted card with a colored icon badge and a shrinking
+     progress bar so the confirmation reads clearly as "done", not just as
+     a passing line of text. */
+  #toast-container .toast-in{
+    background:rgba(255,255,255,.9) !important; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border:1px solid rgba(255,255,255,.6); color:var(--ink);
+    animation:toastSlideIn .25s ease;
+  }
+  @keyframes toastSlideIn{ from{ opacity:0; transform:translateX(16px) scale(.97); } to{ opacity:1; transform:translateX(0) scale(1); } }
+  .toast-icon-badge{
+    width:28px; height:28px; border-radius:999px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .toast-icon-badge.is-success{ background:rgba(44,161,95,.16); color:var(--good); animation:toastPop .35s ease; }
+  .toast-icon-badge.is-error{ background:rgba(201,74,65,.16); color:var(--bad); }
+  @keyframes toastPop{ 0%{ transform:scale(.4); opacity:0; } 60%{ transform:scale(1.15); opacity:1; } 100%{ transform:scale(1); } }
+  .toast-progress{ position:absolute; left:0; bottom:0; height:2px; border-radius:0 0 12px 12px; animation:toastShrink 6s linear forwards; }
+  .toast-progress.is-success{ background:var(--good); }
+  .toast-progress.is-error{ background:var(--bad); }
+  @keyframes toastShrink{ from{ width:100%; } to{ width:0%; } }
+
+  /* Custom checkboxes — a frosted square that fills solid green with a
+     white check on select, matching the rest of the translucent theme
+     instead of each browser's default checkbox chrome. */
+  .chk{
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    width:16px; height:16px; border-radius:5px; margin:0;
+    border:1.5px solid var(--line); background:rgba(255,255,255,.65);
+    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+    display:inline-block; position:relative; cursor:pointer; flex-shrink:0;
+    transition:background .15s, border-color .15s; vertical-align:middle;
+  }
+  .chk:hover{ border-color:var(--accent); }
+  .chk:checked{ background:var(--accent); border-color:var(--accent); }
+  .chk:checked::after{
+    content:''; position:absolute; left:50%; top:42%; width:28%; height:55%;
+    border:solid #fff; border-width:0 2px 2px 0; transform:translate(-50%,-50%) rotate(45deg);
+  }
+  .chk:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .chk:disabled{ opacity:.5; cursor:not-allowed; }
+
+  /* login screen */
+  #login-screen{ background:var(--bg) !important; }
+
+  /* ---- Manage Classrooms: drawer + split workspace ---- */
+  /* Negative margins pull the shell flush against the fixed icon rail and
+     up under the header, so the drawer reads as an extension of the rail
+     itself and gets the full available height rather than losing space to
+     a separate title row above it. The "Manage Classrooms" heading instead
+     floats as an overlay inside the workspace panel (see
+     #classrooms-floating-headline below). */
+  #classrooms-shell{
+    display:flex; align-items:stretch; gap:16px;
+    margin:-20px -24px 0 -24px;
+    height:calc(100vh - var(--header-h) - 84px); min-height:420px;
+    position:relative;
+  }
+  #classroom-drawer{
+    width:300px; flex-shrink:0; background:var(--panel); border:1px solid var(--line); border-left:none;
+    border-radius:0 14px 14px 0; display:flex; flex-direction:column; min-height:0;
+    height:100%; box-shadow:var(--card-shadow);
+    transition:width .18s ease, opacity .18s ease;
+  }
+  #classroom-drawer.collapsed{ width:0; border:0; opacity:0; overflow:hidden; margin-right:-16px; }
+  #classroom-workspace{ flex:1; min-width:0; height:100%; overflow-y:auto; padding-right:2px; position:relative; }
+  /* Floating heading — sits inside the workspace panel's top-left corner
+     instead of taking up its own row above the whole shell. */
+  #classrooms-floating-headline{
+    position:absolute; top:0; left:0; z-index:6; pointer-events:none;
+  }
+  #classrooms-floating-headline > *{ pointer-events:auto; }
+  .workspace-top-spacer{ height:52px; }
+  /* Drawer collapse toggle — anchored to the drawer's own bottom-right
+     corner, so its location is obviously tied to the panel it controls. */
+  #drawer-toggle{
+    position:absolute; bottom:12px; left:264px; z-index:7;
+    width:28px; height:28px; border-radius:999px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    transition:left .18s ease, opacity .18s ease;
+  }
+  #classrooms-shell.drawer-collapsed #drawer-toggle{ left:12px; }
+  .drawer-filter-tab{ font-size:.72rem; padding:5px 8px; border-radius:999px; color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); white-space:nowrap; }
+  .drawer-filter-tab.is-active{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
+  .drawer-list-wrap{ flex:1 1 auto; min-height:0; overflow-y:auto; }
+  .drawer-course-item{ padding:10px 12px 10px 10px; border-bottom:1px solid var(--line); border-left:3px solid transparent; cursor:pointer; }
+  .drawer-course-item:hover{ background:var(--panel-2); }
+  /* Selected item: a soft accent tint + left rail, not a solid green fill —
+     keeps it readable and in line with the rest of the light card theme. */
+  .drawer-course-item.is-selected{ background:var(--accent-tint); border-left-color:var(--accent); }
+  .drawer-course-item.is-selected p{ color:var(--ink); }
+  .drawer-course-item.is-selected .text-\[var\(--ink-faint\)\]{ color:var(--ink-soft); opacity:1; }
+  #workspace-split{ display:grid; grid-template-columns:1fr; gap:16px; }
+  @media (min-width:900px){ #workspace-split{ grid-template-columns:1fr 1fr; } }
+
+  /* ---- View headline: bigger solid-green title with a short yellow
+     underline accent, instead of a yellow badge/box around it. ---- */
+  .view-headline{
+    background:transparent; border:none; padding:0;
+    margin-bottom:16px; display:block; max-width:100%;
+  }
+  .view-headline h1{
+    font-size:1.55rem; font-weight:800; letter-spacing:-.01em; color:var(--accent-ink);
+    line-height:1.2; margin:0; display:inline-block;
+    padding-bottom:5px; border-bottom:3px solid var(--yellow);
+  }
+  .view-headline p{ font-size:.82rem; color:var(--ink-soft); line-height:1.3; margin:6px 0 0; }
+
+  /* ---- Classroom workspace title card ---- */
+  #workspace-title-card{
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--yellow);
+    border-radius:12px; padding:12px 16px; margin-bottom:14px; box-shadow:var(--card-shadow);
+  }
+</style>
+</head>
+<body class="text-[var(--ink)] min-h-screen">
+
+  <!-- Sign-in gate -->
+  <div id="login-screen" class="fixed inset-0 z-[100] bg-[var(--paper)] flex items-center justify-center p-6">
+    <div class="surface p-8 max-w-sm w-full text-center">
+      <img src="classroom-manager-logo.png" alt="" class="h-14 w-auto mx-auto mb-4 object-contain" onerror="this.style.display='none'; document.getElementById('login-logo-fallback').style.display='flex';">
+      <div id="login-logo-fallback" class="w-12 h-12 rounded-2xl bg-[var(--accent)] items-center justify-center text-white mx-auto mb-4" style="display:none;">
+        <span class="w-6 h-6" id="icon-logo-login"></span>
+      </div>
+      <h1 class="text-xl font-bold tracking-tight mb-1">Google Classroom Manager</h1>
+      <p class="text-xs font-semibold text-[var(--accent-ink)] tracking-wide mb-4">St. Mary Catholic School</p>
+      <p class="text-sm text-[var(--ink-soft)] mb-6">Sign in with your Workspace account to continue.</p>
+      <div id="gis-button-container" class="flex justify-center"></div>
+      <p id="login-error" class="hidden text-sm text-[var(--bad)] mt-4"></p>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="fixed top-4 right-4 z-[80] flex flex-col gap-2 w-[92vw] max-w-sm"></div>
+
+  <!-- Modal -->
+  <div id="modal-backdrop" class="hidden fixed inset-0 bg-[#14201a]/45 z-[90] flex items-center justify-center p-4">
+    <div id="modal-content" class="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in max-h-[85vh] overflow-y-auto"></div>
+  </div>
+
+  <div id="app-shell" class="hidden">
+
+    <!-- Fixed green top header -->
+    <header id="app-header">
+      <img src="classroom-manager-logo.png" alt="" class="hdr-logo shrink-0" onerror="this.style.display='none'; document.getElementById('hdr-logo-fallback').style.display='flex';">
+      <div id="hdr-logo-fallback" class="w-8 h-8 rounded-lg bg-white/15 items-center justify-center shrink-0" style="display:none;">
+        <span class="w-4.5 h-4.5" id="icon-logo"></span>
+      </div>
+      <div class="min-w-0 leading-none">
+        <p class="hdr-title truncate">Google Classroom Manager</p>
+        <p class="hdr-sub truncate">St. Mary Catholic School</p>
+      </div>
+      <div class="ml-auto flex items-center gap-3 shrink-0">
+        <div class="text-right leading-tight hidden sm:block">
+          <p id="whoami-email" class="text-xs font-semibold truncate max-w-[220px]">—</p>
+          <p id="whoami-role" class="text-[.65rem] opacity-70 truncate">—</p>
+        </div>
+        <button id="btn-sign-out" class="btn-ghost text-xs font-semibold rounded-lg px-3 py-1.5 transition focus-ring">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Far-left icon rail -->
+    <nav id="icon-rail">
+      <button data-view="summary" class="rail-view-btn rail-btn focus-ring" title="Summary">
+        <span class="w-5 h-5" id="rail-icon-summary"></span><span class="rail-label">Summary</span>
+      </button>
+      <button data-view="roster" class="rail-view-btn rail-btn focus-ring" title="Students &amp; Staff">
+        <span class="w-5 h-5" id="rail-icon-roster"></span><span class="rail-label">Roster</span>
+      </button>
+      <button data-view="classrooms" class="rail-view-btn rail-btn focus-ring" title="Manage Classrooms">
+        <span class="w-5 h-5" id="rail-icon-classrooms"></span><span class="rail-label">Classes</span>
+      </button>
+      <button data-view="settings" class="rail-view-btn rail-btn focus-ring role-admin mt-auto" title="Settings">
+        <span class="w-5 h-5" id="rail-icon-settings"></span><span class="rail-label">Settings</span>
+      </button>
+    </nav>
+
+    <div id="app-content">
+      <main class="px-4 sm:px-6 lg:px-8 py-6 md:py-8 max-w-7xl w-full mx-auto">
+
+        <!-- ============================================================
+             VIEW 1: SUMMARY (data dashboard)
+             ============================================================ -->
+        <section id="view-summary">
+          <div class="view-headline"><h1>Summary</h1><p>System-wide snapshot across all classrooms, teachers, and students.</p></div>
+          <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:rgba(76,140,255,.14); color:#3f7ee8;"><span class="w-4.5 h-4.5" id="icon-badge-total"></span></div>
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total classrooms</p>
+              <p id="stat-total-courses" class="text-3xl font-black tracking-tight">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:var(--good-tint); color:var(--good);"><span class="w-4.5 h-4.5" id="icon-badge-active"></span></div>
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Active classrooms</p>
+              <p id="stat-active-courses" class="text-3xl font-black tracking-tight text-[var(--good)]">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:var(--yellow-tint); color:var(--yellow-ink);"><span class="w-4.5 h-4.5" id="icon-badge-archived"></span></div>
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Archived classrooms</p>
+              <p id="stat-archived-courses" class="text-3xl font-black tracking-tight">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:var(--warn-tint); color:var(--warn);"><span class="w-4.5 h-4.5" id="icon-badge-orphaned"></span></div>
+              <p class="text-xs font-semibold text-[var(--warn)] uppercase tracking-wide mb-1">Owner deactivated</p>
+              <p id="stat-orphaned-courses" class="text-3xl font-black tracking-tight text-[var(--warn)]">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:rgba(155,110,230,.14); color:#7d4fce;"><span class="w-4.5 h-4.5" id="icon-badge-teachers"></span></div>
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total teachers</p>
+              <p id="stat-total-teachers" class="text-3xl font-black tracking-tight">—</p>
+            </div>
+            <div class="stat-card p-5">
+              <div class="stat-icon-badge" style="background:rgba(76,140,255,.14); color:#3f7ee8;"><span class="w-4.5 h-4.5" id="icon-badge-students"></span></div>
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total students</p>
+              <p id="stat-total-students" class="text-3xl font-black tracking-tight">—</p>
+            </div>
+          </div>
+          <p class="text-xs text-[var(--ink-faint)] mt-4 leading-relaxed">Classroom counts come from live Classroom API data. Total teacher/student counts use a <code class="font-mono">getOrgStats</code> backend action when available, falling back to distinct owners seen across loaded classrooms otherwise.</p>
+        </section>
+
+        <!-- ============================================================
+             VIEW 2: STUDENTS & STAFF (roster inspector)
+             ============================================================ -->
+        <section id="view-roster" class="hidden">
+          <div class="view-headline"><h1>Students &amp; Staff</h1><p>Browse users strictly within a single Organizational Unit.</p></div>
+
+          <div class="grid grid-cols-2 gap-3 mb-4 max-w-md">
+            <div class="stat-card p-4">
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Staff</p>
+              <p id="stat-staff-count" class="text-2xl font-black tracking-tight">—</p>
+            </div>
+            <div class="stat-card p-4">
+              <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Students</p>
+              <p id="stat-student-count" class="text-2xl font-black tracking-tight">—</p>
+            </div>
+          </div>
+
+          <div class="surface p-4 sm:p-5 mb-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Class (Organizational Unit)</label>
+                <div class="grid grid-cols-[1fr_auto] gap-2">
+                  <div class="relative min-w-0">
+                    <select id="ou-select" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm bg-[var(--bg)] focus-ring transition-shadow">
+                      <option value="">Loading organizational units…</option>
+                    </select>
+                    <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="ou-chevron"></div>
+                  </div>
+                  <button id="btn-refresh-ous" title="Refresh organizational units and roster" class="btn-icon-neutral h-9 w-9 flex items-center justify-center rounded-lg active:scale-95 transition-all shrink-0 focus-ring">
+                    <span class="w-4 h-4 block" id="icon-refresh-ous"></span>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Search roster</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="icon-search"></span>
+                  <input id="user-search" type="text" placeholder="Filter by name or email…" disabled
+                    class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring disabled:bg-[var(--paper)] disabled:text-[var(--ink-faint)] transition-shadow">
+                </div>
+              </div>
+            </div>
+
+            <div id="selection-bar" class="hidden mt-4 flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[#bfe6cf] rounded-lg px-3 py-2">
+              <span class="text-sm text-[var(--accent-ink)] font-medium"><span id="selected-count">0</span> student(s) selected</span>
+              <button id="btn-enroll-selected" class="role-hide role-write ml-auto text-sm font-medium text-white btn-primary active:scale-[0.98] transition-all rounded-lg px-3 py-1.5 flex items-center gap-1.5 focus-ring">
+                <span class="w-3.5 h-3.5" id="icon-enroll-selected"></span> Enroll in course
+              </button>
+              <button id="btn-clear-selection" class="btn-chip btn-chip-neutral focus-ring">Clear</button>
+            </div>
+          </div>
+
+          <div class="surface overflow-hidden">
+            <div class="relative">
+              <div id="ou-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                <div class="flex items-center gap-2 text-[var(--ink-soft)] text-sm">
+                  <span class="w-5 h-5 animate-spin" id="icon-spinner-users"></span> Loading roster…
+                </div>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-xs text-[var(--ink-faint)] uppercase tracking-wide border-b border-[var(--line)]">
+                      <th class="px-4 py-3 w-10"><input type="checkbox" id="select-all" class="chk"></th>
+                      <th class="px-4 py-3">Name</th>
+                      <th class="px-4 py-3">Email</th>
+                      <th class="px-4 py-3">Class Group</th>
+                      <th class="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="user-table-body">
+                    <tr><td colspan="5" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Select an organizational unit to load its roster.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             VIEW 3: MANAGE CLASSROOMS (drawer + split workspace)
+             ============================================================ -->
+        <section id="view-classrooms" class="hidden">
+          <div id="classrooms-shell">
+            <!-- Collapsible left drawer — visually attached to the icon rail -->
+            <aside id="classroom-drawer">
+              <div class="p-3 border-b border-[var(--line)] space-y-2">
+                <div class="flex items-center gap-2">
+                  <div class="relative flex-1 min-w-0">
+                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="icon-search-courses"></span>
+                    <input id="course-search" type="text" placeholder="Search classrooms…" class="w-full border border-[var(--line)] rounded-lg pl-8 pr-2 py-1.5 text-xs focus-ring">
+                  </div>
+                  <button id="btn-refresh-drawer" title="Refresh classrooms" class="btn-icon-neutral h-8 w-8 flex items-center justify-center rounded-lg shrink-0 focus-ring">
+                    <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
+                  </button>
+                  <button id="btn-open-create-course" title="New classroom" class="btn-icon-tint role-write h-8 w-8 flex items-center justify-center rounded-lg shrink-0 focus-ring">
+                    <span class="w-4 h-4 block" id="icon-create-course"></span>
+                  </button>
+                </div>
+                <div class="relative">
+                  <select id="course-sort" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-2.5 pr-7 py-1.5 text-xs bg-[var(--bg)] focus-ring">
+                    <option value="updateTime_desc">Last active · newest</option>
+                    <option value="updateTime_asc">Last active · oldest</option>
+                    <option value="creationTime_desc">Created · newest</option>
+                    <option value="creationTime_asc">Created · oldest</option>
+                    <option value="name_asc">Name · A–Z</option>
+                    <option value="name_desc">Name · Z–A</option>
+                    <option value="owner_asc">Primary teacher · A–Z</option>
+                  </select>
+                  <div class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--ink-faint)]" id="course-sort-chevron"></div>
+                </div>
+                <div id="course-view-tabs" class="flex flex-wrap gap-1.5"></div>
+              </div>
+
+              <div id="course-bulk-bar" class="hidden flex flex-wrap items-center gap-2 bg-[var(--accent-tint)] border-b border-[var(--line)] px-3 py-2">
+                <span class="text-xs text-[var(--accent-ink)] font-medium"><span id="course-selected-count">0</span> selected</span>
+                <button id="btn-bulk-archive" class="btn-chip btn-chip-warn role-write bulk-archive-btn ml-auto focus-ring">Archive</button>
+                <button id="btn-bulk-unarchive" class="btn-chip btn-chip-accent role-write bulk-unarchive-btn focus-ring">Unarchive</button>
+                <button id="btn-bulk-delete" class="btn-chip btn-chip-bad role-write focus-ring">Delete</button>
+                <button id="btn-course-clear-selection" class="btn-chip btn-chip-neutral focus-ring">Clear</button>
+              </div>
+
+              <div class="drawer-list-wrap relative">
+                <div id="courses-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                  <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-courses"></span>
+                </div>
+                <ul id="courses-list" class="divide-y divide-[var(--line)]">
+                  <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Loading classrooms…</li>
+                </ul>
+              </div>
+            </aside>
+
+            <!-- Collapse toggle — sits on the seam between the drawer and
+                 the workspace it controls, instead of an unrelated title bar -->
+            <button id="drawer-toggle" title="Toggle classroom list" class="btn-icon-neutral focus-ring">
+              <span class="w-3.5 h-3.5" id="icon-drawer-toggle"></span>
+            </button>
+
+            <!-- Main workspace -->
+            <div id="classroom-workspace">
+              <div id="classrooms-floating-headline" class="view-headline mb-0"><h1>Manage Classrooms</h1></div>
+              <div class="workspace-top-spacer"></div>
+
+              <div id="workspace-empty" class="surface p-10 text-center text-sm text-[var(--ink-faint)]">
+                Select a classroom from the list to open its workspace.
+              </div>
+
+              <div id="workspace-loaded" class="hidden">
+                <div id="workspace-title-card" class="flex items-start justify-between gap-3 flex-wrap">
+                  <div class="min-w-0">
+                    <h2 id="workspace-course-name" class="text-base font-bold truncate">—</h2>
+                    <p id="workspace-course-id" class="text-xs text-[var(--ink-faint)] font-mono leading-tight">—</p>
+                    <p id="workspace-course-dates" class="text-xs text-[var(--ink-faint)] mt-0.5">Created — &middot; Last active —</p>
+                    <p id="workspace-course-owner" class="text-xs mt-0.5 hidden"></p>
+                  </div>
+                  <div class="flex gap-2 shrink-0">
+                    <button id="btn-refresh-course-members" title="Refresh teachers &amp; students" class="btn-icon-neutral h-9 w-9 flex items-center justify-center rounded-lg focus-ring">
+                      <span class="w-4 h-4 block" id="icon-refresh-course-members"></span>
+                    </button>
+                    <button id="btn-export-grades" class="btn-ghost h-9 px-3 rounded-lg text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
+                      <span class="w-3.5 h-3.5" id="icon-export-grades"></span> Export grades
+                    </button>
+                    <button id="btn-export-topics" class="btn-ghost h-9 px-3 rounded-lg text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
+                      <span class="w-3.5 h-3.5" id="icon-export-topics"></span> Export topics &amp; assignments
+                    </button>
+                  </div>
+                </div>
+
+                <div id="workspace-split">
+                  <!-- Students (left) -->
+                  <div class="surface border-l-[3px] border-l-[var(--good)] overflow-hidden">
+                    <div class="relative">
+                      <div id="students-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                        <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-students"></span>
+                      </div>
+                      <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2 flex-wrap">
+                        <span class="w-4 h-4 text-[var(--good)]" id="icon-students-header"></span>
+                        <h2 class="font-semibold">Students</h2>
+                        <span id="students-count" class="text-xs font-medium bg-[var(--good-tint)] text-[var(--good)] rounded-full px-2 py-0.5">0</span>
+                        <button id="btn-select-all-students" class="btn-chip btn-chip-accent role-write focus-ring">Select all</button>
+                        <button id="btn-open-add-student" class="btn-icon-tint role-write ml-auto w-7 h-7 flex items-center justify-center rounded-lg focus-ring" title="Add students">
+                          <span class="w-4 h-4" id="icon-add-student"></span>
+                        </button>
+                      </div>
+                      <div class="px-4 py-2 flex gap-2 border-b border-[var(--paper)]">
+                        <div class="relative flex-1 min-w-0">
+                          <span class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="icon-search-students"></span>
+                          <input id="student-search" type="text" placeholder="Search students…" class="w-full border border-[var(--line)] rounded-lg pl-8 pr-2 py-1.5 text-xs focus-ring">
+                        </div>
+                        <select id="student-sort" class="border border-[var(--line)] rounded-lg px-2 py-1.5 text-xs bg-[var(--bg)] focus-ring">
+                          <option value="name_asc">Name A–Z</option>
+                          <option value="name_desc">Name Z–A</option>
+                        </select>
+                      </div>
+                      <div id="student-bulk-bar" class="hidden px-4 py-2 flex items-center gap-3 bg-[var(--accent-tint)] border-b border-[#bfe6cf]">
+                        <span class="text-xs text-[var(--accent-ink)] font-medium"><span id="student-selected-count">0</span> selected</span>
+                        <button id="btn-bulk-remove-students" class="btn-chip btn-chip-bad role-write ml-auto focus-ring">Remove selected</button>
+                      </div>
+                      <ul id="students-list" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-2 content-start max-h-[26rem] overflow-y-auto">
+                        <li class="col-span-full px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its students.</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <!-- Teachers (right) -->
+                  <div class="surface border-l-[3px] border-l-[var(--accent)] overflow-hidden self-start">
+                    <div class="relative">
+                      <div id="teachers-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                        <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-teachers"></span>
+                      </div>
+                      <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2">
+                        <span class="w-4 h-4 text-[var(--accent)]" id="icon-teachers-header"></span>
+                        <h2 class="font-semibold">Teachers</h2>
+                        <span id="teachers-count" class="text-xs font-medium bg-[var(--accent-tint)] text-[var(--accent-ink)] rounded-full px-2 py-0.5">0</span>
+                        <div class="relative ml-auto role-admin">
+                          <button id="btn-open-add-teacher" class="btn-icon-tint w-7 h-7 flex items-center justify-center rounded-lg focus-ring" title="Teacher actions">
+                            <span class="w-4 h-4" id="icon-add-teacher"></span>
+                          </button>
+                        </div>
+                      </div>
+                      <ul id="teachers-list" class="divide-y divide-[var(--paper)]">
+                        <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its teachers.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bulk Create — standalone, detached from the classroom list -->
+          <div class="mt-4">
+            <button id="btn-bulk-create" class="role-write w-full sm:w-auto h-10 px-5 rounded-lg btn-primary text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 focus-ring">
+              <span class="w-3.5 h-3.5" id="icon-bulk-create"></span> Bulk Create
+            </button>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             VIEW 4: SETTINGS (app configuration & admin controls)
+             ============================================================ -->
+        <section id="view-settings" class="hidden">
+          <div class="view-headline"><h1>Settings</h1><p>App-wide configuration and administrative controls.</p></div>
+
+          <div class="space-y-6 max-w-3xl">
+            <!-- Class Group Renaming (OU -> friendly label mappings) -->
+            <div class="surface p-4 sm:p-5">
+              <h2 class="font-semibold mb-1">Class Group Renaming</h2>
+              <p class="text-xs text-[var(--ink-faint)] mb-3">Rename an Organizational Unit to a friendlier, human-readable label (e.g. "1st Grade"). These renamed groups appear under "By Class Group" when enrolling students. This never changes anything in Google Admin — it's just a local label.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 mb-3">
+                <select id="mapping-ou-select" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+                  <option value="">Select OU…</option>
+                </select>
+                <input id="mapping-label-input" type="text" placeholder="Rename to, e.g. 1st Grade" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+                <button id="btn-add-mapping" class="h-full px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Save</button>
+              </div>
+              <ul id="mappings-list" class="divide-y divide-[var(--line)] border border-[var(--line)] rounded-lg overflow-hidden">
+                <li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No renamed class groups yet.</li>
+              </ul>
+            </div>
+
+            <!-- Global OU selectors -->
+            <div class="surface p-4 sm:p-5">
+              <h2 class="font-semibold mb-1">Global OU scope</h2>
+              <p class="text-xs text-[var(--ink-faint)] mb-3">Defines which Organizational Units the app treats as staff vs. students.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Staff OU</label>
+                  <select id="setting-staff-ou" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+                    <option value="">Select OU…</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Student parent OU</label>
+                  <select id="setting-student-ou" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+                    <option value="">Select OU…</option>
+                  </select>
+                  <p class="text-xs text-[var(--ink-faint)] mt-1">This OU itself holds no students directly — only its sub-OUs do (e.g. "class of 2029"). Student counts and lookups read from the sub-OUs underneath it, not from this OU itself.</p>
+                </div>
+              </div>
+              <button id="btn-save-scope" class="mt-3 h-9 px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Save scope</button>
+            </div>
+
+            <!-- User Management (admin only) -->
+            <div id="settings-admin-panel" class="surface p-4 sm:p-5 role-admin">
+              <h2 class="font-semibold mb-1">User Management</h2>
+              <p class="text-xs text-[var(--ink-faint)] mb-3">Add app users and assign a role, or edit an existing user's role. Saved directly to the Google Sheet backend.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 mb-3">
+                <input id="invite-email-input" type="email" placeholder="person@school.edu" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+                <select id="invite-role-select" class="border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+                  <option value="superadmin">Super admin</option>
+                  <option value="admin">Admin</option>
+                  <option value="dept_head">Department head</option>
+                  <option value="auditor">Auditor (read-only)</option>
+                </select>
+                <button id="btn-invite-user" class="h-full px-4 rounded-lg btn-primary text-sm font-medium focus-ring">Add user</button>
+              </div>
+              <p id="invite-editing-note" class="hidden text-xs text-[var(--accent-ink)] mb-2">Editing <span id="invite-editing-email" class="font-medium"></span> — saving will update their role. <button type="button" id="btn-cancel-edit-user" class="underline hover:opacity-70 focus-ring">Cancel</button></p>
+              <ul id="app-users-list" class="divide-y divide-[var(--line)] border border-[var(--line)] rounded-lg overflow-hidden">
+                <li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No app users loaded.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+      </main>
+      <footer class="border-t border-[var(--line)] px-4 sm:px-6 lg:px-8 py-3 text-center">
+        <p class="text-xs text-[var(--ink-faint)] leading-tight">Made only for St. Mary Catholic School.</p>
+      </footer>
+    </div>
+  </div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const API_URL = "https://script.google.com/macros/s/AKfycbx4ctm9y7KJD759707UH7e3XECxL5Q_UIhhLuz-Hu9d7Ol-OAmFgaIkNEwQhYT7ytj4/exec";
+const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
-   ENTRY POINTS
+   ICONS
    ============================================================ */
-function doGet(e) {
-  try {
-    const action = e.parameter.action;
-    const user = action === 'ping' ? null : authenticate(e.parameter.idToken);
-    const refresh = e.parameter.refresh === '1';
-
-    let result;
-    switch (action) {
-      case 'ping':
-        result = { ok: true };
-        break;
-      case 'whoAmI':
-        result = { email: user.email, role: user.role, ouScope: user.ouScope || '' };
-        break;
-      case 'getOUs':
-        requireRole(user, ['superadmin', 'admin', 'dept_head', 'auditor']);
-        result = getOUs(refresh);
-        break;
-      case 'getUsersByOU':
-        requireRole(user, ['superadmin', 'admin', 'dept_head', 'auditor']);
-        result = getUsersByOU(e.parameter.orgUnitPath, refresh);
-        break;
-      case 'searchUsers':
-        requireRole(user, ['superadmin', 'admin', 'dept_head', 'auditor']);
-        result = searchUsers(e.parameter.q);
-        break;
-      case 'getCourses':
-        requireRole(user, ['superadmin', 'admin', 'dept_head', 'auditor']);
-        result = getCourses(e.parameter.refresh === '1');
-        break;
-      case 'getCourseMembers':
-        requireRole(user, ['superadmin', 'admin', 'dept_head', 'auditor']);
-        result = getCourseMembers(e.parameter.courseId, refresh);
-        break;
-      case 'exportGrades':
-        requireRole(user, ['superadmin', 'admin', 'auditor']);
-        result = exportGradesCsv(e.parameter.courseId);
-        break;
-      case 'exportTopicsAndAssignments':
-        requireRole(user, ['superadmin', 'admin', 'auditor']);
-        result = exportTopicsAndAssignmentsCsv(e.parameter.courseId);
-        break;
-      case 'getOrgStats':
-        requireRole(user, ['superadmin', 'admin', 'dept_head', 'auditor']);
-        result = getOrgStats(refresh);
-        break;
-      case 'getOuMappings':
-        requireRole(user, ['superadmin', 'admin', 'dept_head', 'auditor']);
-        result = getOuMappings();
-        break;
-      case 'getAppSettings':
-        requireRole(user, ['superadmin', 'admin']);
-        result = getAppSettings();
-        break;
-      case 'getAppUsers':
-        requireRole(user, ['superadmin', 'admin']);
-        result = getAppUsers();
-        break;
-      default:
-        throw new Error('Unknown action: ' + action);
-    }
-    return jsonOut(Object.assign({ success: true }, result));
-  } catch (err) {
-    return jsonOut({ success: false, error: err && err.message ? err.message : String(err) });
-  }
-}
-
-function doPost(e) {
-  try {
-    const body = JSON.parse(e.postData.contents);
-    const user = authenticate(body.idToken);
-    const action = body.action;
-    let result;
-    switch (action) {
-      case 'createCourse':
-        requireRole(user, ['superadmin', 'admin']);
-        result = createCourse(body);
-        break;
-      case 'archiveCourse':
-        requireRole(user, ['superadmin', 'admin']);
-        result = setCourseState(body.courseId, 'ARCHIVED');
-        patchCoursesCacheState_([body.courseId], 'ARCHIVED');
-        break;
-      case 'unarchiveCourse':
-        requireRole(user, ['superadmin', 'admin']);
-        result = setCourseState(body.courseId, 'ACTIVE');
-        patchCoursesCacheState_([body.courseId], 'ACTIVE');
-        break;
-      case 'deleteCourse':
-        requireRole(user, ['superadmin', 'admin']);
-        result = deleteCourse(body.courseId);
-        removeCoursesFromCache_([body.courseId]);
-        break;
-      case 'bulkArchiveCourses':
-        requireRole(user, ['superadmin', 'admin']);
-        result = bulkCourseOp(body.courseIds, function (id) { return setCourseState(id, 'ARCHIVED'); }, function (ok) { patchCoursesCacheState_(ok, 'ARCHIVED'); });
-        break;
-      case 'bulkUnarchiveCourses':
-        requireRole(user, ['superadmin', 'admin']);
-        result = bulkCourseOp(body.courseIds, function (id) { return setCourseState(id, 'ACTIVE'); }, function (ok) { patchCoursesCacheState_(ok, 'ACTIVE'); });
-        break;
-      case 'bulkDeleteCourses':
-        requireRole(user, ['superadmin', 'admin']);
-        result = bulkCourseOp(body.courseIds, function (id) { return deleteCourse(id); }, function (ok) { removeCoursesFromCache_(ok); });
-        break;
-      case 'addTeacher':
-        requireRole(user, ['superadmin', 'admin']);
-        result = addTeacher(body.courseId, body.teacherEmail);
-        break;
-      case 'removeTeacher':
-        requireRole(user, ['superadmin', 'admin']);
-        result = removeTeacher(body.courseId, body.teacherEmail);
-        break;
-      case 'setPrimaryTeacher':
-        requireRole(user, ['superadmin', 'admin']);
-        result = setPrimaryTeacher(body.courseId, body.teacherEmail);
-        break;
-      case 'addStudent':
-        requireRole(user, ['superadmin', 'admin', 'dept_head']);
-        if (user.role === 'dept_head') requireEmailInScope(user, body.studentEmail);
-        result = addStudent(body.courseId, body.studentEmail);
-        break;
-      case 'removeStudent':
-        requireRole(user, ['superadmin', 'admin', 'dept_head']);
-        if (user.role === 'dept_head') requireEmailInScope(user, body.studentEmail);
-        result = removeStudent(body.courseId, body.studentEmail);
-        break;
-      case 'bulkAddStudents':
-        requireRole(user, ['superadmin', 'admin', 'dept_head']);
-        result = bulkAddStudents(body.courseId, body.studentEmails, user);
-        break;
-      case 'bulkAddStudentsByOU':
-        requireRole(user, ['superadmin', 'admin', 'dept_head']);
-        if (user.role === 'dept_head') requireOuInScope(user, body.orgUnitPath);
-        result = bulkAddStudentsByOU(body.courseId, body.orgUnitPath);
-        break;
-      case 'bulkRemoveStudents':
-        requireRole(user, ['superadmin', 'admin', 'dept_head']);
-        result = bulkRemoveStudents(body.courseId, body.studentEmails, user);
-        break;
-      case 'saveOuMapping':
-        requireRole(user, ['superadmin', 'admin']);
-        result = saveOuMapping(body.orgUnitPath, body.label);
-        break;
-      case 'deleteOuMapping':
-        requireRole(user, ['superadmin', 'admin']);
-        result = deleteOuMapping(body.orgUnitPath);
-        break;
-      case 'saveAppSettings':
-        requireRole(user, ['superadmin', 'admin']);
-        result = saveAppSettings(body.staffOU, body.studentParentOU);
-        break;
-      case 'addAppUser':
-        requireRole(user, ['superadmin', 'admin']);
-        result = addAppUser(body.email, body.role);
-        break;
-      case 'bulkCreateCoursesFromFile':
-        requireRole(user, ['superadmin', 'admin']);
-        result = bulkCreateCoursesFromFile(body.fileName, body.fileBase64);
-        break;
-      default:
-        throw new Error('Unknown action: ' + action);
-    }
-    return jsonOut(Object.assign({ success: true }, result));
-  } catch (err) {
-    return jsonOut({ success: false, error: err && err.message ? err.message : String(err) });
-  }
-}
-
-function jsonOut(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
+const ICONS = {
+  logo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5-10-5z"></path><path d="M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"></path></svg>`,
+  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`,
+  user: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"></path></svg>`,
+  users: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"></path><circle cx="17" cy="8" r="2.8"></circle><path d="M15.3 14.2c2.7.6 4.7 2.7 4.7 5.8"></path></svg>`,
+  trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M6 7l1 13h10l1-13"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
+  spinner: `<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25"></circle><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path></svg>`,
+  mail: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg>`,
+  building: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"></rect><line x1="8" y1="7" x2="8" y2="7.01"></line><line x1="12" y1="7" x2="12" y2="7.01"></line><line x1="16" y1="7" x2="16" y2="7.01"></line><line x1="8" y1="11" x2="8" y2="11.01"></line><line x1="12" y1="11" x2="12" y2="11.01"></line><line x1="16" y1="11" x2="16" y2="11.01"></line><path d="M9 21v-3h6v3"></path></svg>`,
+  chevronDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
+  x: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+  checkCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="8 12 11 15 16 9"></polyline></svg>`,
+  alertCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12" y2="16.01"></line></svg>`,
+  refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v6h6"></path><path d="M20 20v-6h-6"></path><path d="M5 15a8 8 0 0 0 14 3l1-1"></path><path d="M19 9a8 8 0 0 0-14-3L4 7"></path></svg>`,
+  book: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5v-13A2.5 2.5 0 0 1 6.5 3z"></path></svg>`,
+  chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>`,
+  chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"></polyline></svg>`,
+  warn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 1 21h22L12 2z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12" y2="17.01"></line></svg>`,
+  star: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>`,
+  download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M4 21h16"></path></svg>`,
+  upload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9"></path><path d="M7 14l5-5 5 5"></path><path d="M4 21h16"></path></svg>`,
+  gauge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path><path d="M4.5 19a9 9 0 1 1 15 0"></path><path d="M12 12l3-3"></path></svg>`,
+  gear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.13.36.42.65.78.78.36.13.51.15 1.82.15H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`,
+};
+function icon(el, name, extraClass) {
+  if (!el) return;
+  el.innerHTML = ICONS[name] || '';
+  const svg = el.querySelector('svg');
+  if (svg) { svg.setAttribute('class', 'w-full h-full ' + (extraClass || '')); }
 }
 
 /* ============================================================
-   AUTH — verify Google ID token, resolve role
+   STATE
    ============================================================ */
+const state = {
+  idToken: '',
+  me: null, // { email, role, ouScope }
+  activeView: 'summary', // summary | roster | classrooms | settings
+  ous: [],
+  selectedOU: '',
+  users: [],
+  filteredUsers: [],
+  selectedUserIds: new Set(),
+  searchQuery: '',
+  loadingUsers: false,
+  courseId: '',
+  courses: [],
+  filteredCourses: [],
+  courseSearchQuery: '',
+  courseView: 'active', // active | archived | provisioned | declined | orphaned | all
+  courseSort: 'updateTime_desc',
+  loadingCourses: false,
+  selectedCourseIds: new Set(),
+  teachers: [],
+  students: [],
+  studentSearchQuery: '',
+  studentSort: 'name_asc',
+  selectedStudentIds: new Set(),
+  drawerCollapsed: false,
+  ouMappings: [], // [{orgUnitPath, label}]
+  appSettings: { staffOU: '', studentParentOU: '' },
+  appUsers: [],
+  editingAppUserEmail: '',
+  orgStats: null, // { totalStaff, totalStudents, totalTeachers }
+};
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function initials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+}
+function getUserName(u) { return u?.name?.fullName || u?.fullName || u?.name || u?.primaryEmail || 'Unknown'; }
+function getUserEmail(u) { return u?.primaryEmail || u?.email || ''; }
+function getUserOuPath(u) { return u?.orgUnitPath || u?.orgUnitPath1 || ''; }
+function isUserActive(u) {
+  if (typeof u?.suspended === 'boolean') return !u.suspended;
+  if (typeof u?.active === 'boolean') return u.active;
+  if (typeof u?.status === 'string') return u.status.toLowerCase() === 'active';
+  return true;
+}
+function getMemberName(m) { return m?.profile?.name?.fullName || m?.name?.fullName || m?.fullName || m?.name || m?.profile?.emailAddress || m?.email || 'Unknown'; }
+function getMemberEmail(m) { return m?.profile?.emailAddress || m?.email || m?.emailAddress || ''; }
+function currentCourseLabel() {
+  const course = state.courses.find(c => getCourseId(c) === state.courseId);
+  return course ? getCourseName(course) : state.courseId;
+}
+function getCourseId(c) { return c?.id || c?.courseId || ''; }
+function getCourseName(c) { return c?.name || c?.courseName || getCourseId(c); }
+function getCourseSection(c) { return c?.section || c?.descriptionHeading || ''; }
+function isOwnerInactive(c) { return c?.ownerInactive === true; }
 /**
- * Every single request (not just sign-in) calls authenticate(), which used
- * to always make an external HTTP round trip to Google's tokeninfo
- * endpoint to verify the token — including the burst of ~7 requests the
- * frontend fires in parallel right after sign-in (getOUs, getCourses,
- * getOrgStats, getOuMappings, getAppSettings, getAppUsers, whoAmI), each
- * independently re-verifying the identical token within milliseconds of
- * each other. That repeated round trip was a real, avoidable chunk of why
- * sign-in felt slow. The verified result is now cached briefly, keyed by a
- * hash of the token (not the raw token itself) so a forged token still
- * can't produce a cache hit — only a genuine successful verification ever
- * gets cached. All the same checks below (audience, expiry, email
- * verification, hosted domain) still run on every call either way; this
- * only skips re-asking Google to re-confirm a token we already confirmed
- * moments ago.
+ * True if the course owner is outside the configured Staff OU — e.g. a
+ * parish staff member (their own OU) creating a confirmation-class
+ * classroom — or couldn't be resolved against this Workspace directory at
+ * all (a fully external/cross-domain account). Returns false rather than
+ * guessing if no Staff OU is configured, since there's nothing to compare
+ * against.
  */
-function authenticate(idToken) {
-  if (!idToken) throw new Error('Not signed in.');
+function isOwnerOutsideStaffOu(c) {
+  const staffOU = (state.appSettings && state.appSettings.staffOU) || '';
+  if (!staffOU) return false;
+  if (c?.ownerFound === false) return true;
+  const path = c?.ownerOuPath || '';
+  if (!path) return false;
+  const base = staffOU.replace(/\/$/, '');
+  return !(path === base || path.indexOf(base + '/') === 0);
+}
+function getOwnerEmail(c) { return c?.ownerEmail || c?.teacherEmail || ''; }
+function getClassGroupLabel(orgUnitPath) {
+  const m = state.ouMappings.find(x => x.orgUnitPath === orgUnitPath);
+  return m ? m.label : orgUnitPath;
+}
+function formatShortDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+function downloadText(filename, text) {
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
 
-  const cache = CacheService.getScriptCache();
-  const cacheKey = 'tokinfo_' + Utilities.base64EncodeWebSafe(
-    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken)
-  ).slice(0, 40);
+/* ============================================================
+   TOASTS
+   ============================================================ */
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  const isSuccess = type === 'success';
+  el.className = `toast-in relative flex items-start gap-3 rounded-xl shadow-lg px-4 py-3 pb-3.5 text-sm overflow-hidden`;
+  el.innerHTML = `
+    <span class="toast-icon-badge ${isSuccess ? 'is-success' : 'is-error'}"><span class="w-4 h-4 block">${ICONS[isSuccess ? 'checkCircle' : 'alertCircle']}</span></span>
+    <span class="flex-1 text-[var(--ink)] leading-snug pt-1">${escapeHtml(message)}</span>
+    <button class="shrink-0 text-[var(--ink-faint)] hover:text-[var(--ink-soft)] w-4 h-4 mt-1.5">${ICONS.x}</button>
+    <span class="toast-progress ${isSuccess ? 'is-success' : 'is-error'}"></span>
+  `;
+  el.querySelector('button').addEventListener('click', () => el.remove());
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+}
 
-  let info;
-  const cachedRaw = cache.get(cacheKey);
-  if (cachedRaw) {
-    info = JSON.parse(cachedRaw);
-  } else {
-    const resp = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), {
-      muteHttpExceptions: true,
+/* ============================================================
+   API LAYER
+   ============================================================ */
+async function apiGet(params, timeoutMs = 30000) {
+  if (!API_URL || API_URL.indexOf('PASTE_YOUR') === 0) {
+    throw new Error('Set API_URL at the top of the <script> to your deployed Apps Script Web App URL.');
+  }
+  const url = new URL(API_URL);
+  Object.entries(Object.assign({}, params, { idToken: state.idToken })).forEach(([k, v]) => url.searchParams.set(k, v));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url.toString(), { method: 'GET', signal: controller.signal });
+    if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
+    const data = await res.json();
+    if (data && data.success === false) throw new Error(data.error || 'Request failed');
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('The request took too long and timed out. Please try again.');
+    throw err;
+  } finally { clearTimeout(timer); }
+}
+async function apiPost(body, timeoutMs = 30000) {
+  if (!API_URL || API_URL.indexOf('PASTE_YOUR') === 0) {
+    throw new Error('Set API_URL at the top of the <script> to your deployed Apps Script Web App URL.');
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({}, body, { idToken: state.idToken })),
+      signal: controller.signal,
     });
-    if (resp.getResponseCode() !== 200) throw new Error('Session expired — please sign in again.');
-    info = JSON.parse(resp.getContentText());
-    // Short TTL — well under the token's own ~1hr lifetime, just long
-    // enough to cover the initial burst of parallel requests at boot.
-    cache.put(cacheKey, JSON.stringify(info), 240);
-  }
-
-  const expectedClientId = PropertiesService.getScriptProperties().getProperty(GIS_CLIENT_ID_PROP);
-  if (expectedClientId && info.aud !== expectedClientId) throw new Error('Token was not issued for this app.');
-  if (Number(info.exp) * 1000 < Date.now()) throw new Error('Session expired — please sign in again.');
-  if (info.email_verified !== 'true' && info.email_verified !== true) throw new Error('Email not verified.');
-
-  const hostedDomain = PropertiesService.getScriptProperties().getProperty(HOSTED_DOMAIN_PROP);
-  if (hostedDomain && info.hd !== hostedDomain) throw new Error('This app is restricted to ' + hostedDomain + ' accounts.');
-
-  const email = info.email;
-  const role = getRoleForEmail(email);
-  if (!role) throw new Error('Your account (' + email + ') has not been granted access. Ask an admin to add you to the Roles sheet.');
-  return { email: email, role: role.role, ouScope: role.ouScope };
+    if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
+    const data = await res.json();
+    if (data && data.success === false) throw new Error(data.error || 'Request failed');
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('The request took too long and timed out. Please try again.');
+    throw err;
+  } finally { clearTimeout(timer); }
 }
-
-function requireRole(user, allowed) {
-  if (!user || allowed.indexOf(user.role) === -1) {
-    throw new Error('Your role (' + (user ? user.role : 'none') + ') does not have permission for this action.');
-  }
-}
-
-function requireOuInScope(user, orgUnitPath) {
-  const scope = user.ouScope || '';
-  if (!scope) throw new Error('Your account has no OU scope configured.');
-  if (!orgUnitPath || (orgUnitPath !== scope && orgUnitPath.indexOf(scope + '/') !== 0)) {
-    throw new Error('That organizational unit is outside your assigned scope (' + scope + ').');
-  }
-}
-
-/**
- * Security-sensitive scope check performed on every dept_head write, so it
- * intentionally does NOT use the cached directory snapshot — always asks
- * AdminDirectory directly so a stale cache can never let a dept_head enroll
- * or remove a student who has since moved out of their assigned OU.
- */
-function requireEmailInScope(user, email) {
-  const scope = user.ouScope || '';
-  if (!scope) throw new Error('Your account has no OU scope configured.');
-  const u = AdminDirectory.Users.get(email, { projection: 'basic' });
-  const path = u.orgUnitPath || '';
-  if (path !== scope && path.indexOf(scope + '/') !== 0) {
-    throw new Error(email + ' is outside your assigned OU scope (' + scope + ').');
-  }
-}
-
-/**
- * Roles sheet format (tab name "Roles"): columns Email | Role | OUScope
- * Role is one of: superadmin, admin, dept_head, auditor.
- * OUScope only matters for dept_head rows, e.g. "/Staff/Math".
- */
-function getRoleForEmail(email) {
-  const cache = CacheService.getScriptCache();
-  const cacheKey = 'role_' + email;
-  const cached = cache.get(cacheKey);
-  if (cached) return cached === 'NONE' ? null : JSON.parse(cached);
-
-  const sheet = getRolesSheet_();
-  const values = sheet.getDataRange().getValues(); // [ [Email, Role, OUScope], ... ] row 0 = header
-  for (let i = 1; i < values.length; i++) {
-    const rowEmail = String(values[i][0] || '').trim().toLowerCase();
-    if (rowEmail === email.toLowerCase()) {
-      const role = { role: String(values[i][1] || '').trim(), ouScope: String(values[i][2] || '').trim() };
-      cache.put(cacheKey, JSON.stringify(role), ROLE_CACHE_SECONDS);
-      return role;
-    }
-  }
-  cache.put(cacheKey, 'NONE', ROLE_CACHE_SECONDS);
-  return null;
-}
-
-function invalidateRoleCache(email) {
-  CacheService.getScriptCache().remove('role_' + email);
+// Soft-fail wrapper for optional/newer backend actions that may not exist yet.
+async function apiGetOptional(params, timeoutMs = 20000) {
+  try { return await apiGet(params, timeoutMs); } catch (err) { return null; }
 }
 
 /* ============================================================
-   SPREADSHEET HELPERS — shared by Roles / OuMappings / AppSettings
+   AUTH — Google Identity Services
    ============================================================ */
-function getRolesSpreadsheet_() {
-  const sheetId = PropertiesService.getScriptProperties().getProperty(ROLES_SHEET_PROP);
-  if (!sheetId) throw new Error('Backend is not configured: missing ROLES_SHEET_ID script property.');
-  return SpreadsheetApp.openById(sheetId);
-}
+// The ID token only lived in a JS variable before, so any page refresh
+// wiped it and forced a fresh sign-in even though the token itself was
+// often still valid. sessionStorage survives a refresh (but clears itself
+// when the tab closes, so it doesn't linger like localStorage would).
+const SESSION_STORAGE_KEY = 'classroomAdminSession';
 
-function getRolesSheet_() {
-  const sheet = getRolesSpreadsheet_().getSheetByName('Roles');
-  if (!sheet) throw new Error('Roles sheet is missing a tab named "Roles".');
-  return sheet;
-}
-
-/** Returns the named tab, creating it with the given header row if it doesn't exist yet. */
-function getOrCreateSheet_(tabName, headerRow) {
-  const ss = getRolesSpreadsheet_();
-  let sheet = ss.getSheetByName(tabName);
-  if (!sheet) {
-    sheet = ss.insertSheet(tabName);
-    sheet.getRange(1, 1, 1, headerRow.length).setValues([headerRow]);
-    sheet.setFrozenRows(1);
-  }
-  return sheet;
-}
-
-/* ============================================================
-   PERSISTENT CACHE — small JSON snapshots stored in Drive so course/OU/
-   user-directory data survives across sessions instead of being rebuilt
-   (and re-hitting the Classroom/Admin APIs) on every single login.
-   ============================================================ */
-const CACHE_FOLDER_PROP = 'CACHE_FOLDER_ID';
-const CACHE_FOLDER_NAME = 'Classroom Admin — Cache (do not delete)';
-
-function getOrCreateCacheFolder_() {
-  const props = PropertiesService.getScriptProperties();
-  const existingId = props.getProperty(CACHE_FOLDER_PROP);
-  if (existingId) {
-    try { return DriveApp.getFolderById(existingId); } catch (err) { /* was deleted — recreate below */ }
-  }
-  const it = DriveApp.getFoldersByName(CACHE_FOLDER_NAME);
-  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(CACHE_FOLDER_NAME);
-  props.setProperty(CACHE_FOLDER_PROP, folder.getId());
-  return folder;
-}
-
-function getCacheFile_(name, createIfMissing) {
+function decodeJwtPayload_(token) {
   try {
-    const folder = getOrCreateCacheFolder_();
-    const it = folder.getFilesByName(name);
-    if (it.hasNext()) return it.next();
-    if (!createIfMissing) return null;
-    return folder.createFile(name, '{}', MimeType.PLAIN_TEXT);
-  } catch (err) {
-    // Drive access unavailable (permission not yet granted, quota, etc.) —
-    // treat this exactly like "no cache file yet" rather than letting the
-    // error bubble up and fail the whole request. Every caller below
-    // already handles a null/false return by just doing the live fetch.
-    return null;
-  }
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '==='.slice((base64.length + 3) % 4);
+    const json = decodeURIComponent(atob(padded).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    return JSON.parse(json);
+  } catch (err) { return null; }
 }
-
-function readCacheJson_(name) {
-  const file = getCacheFile_(name, false);
-  if (!file) return null;
+function saveSession_(idToken) {
   try {
-    const text = file.getBlob().getDataAsString();
-    if (!text) return null;
-    return JSON.parse(text);
-  } catch (err) {
-    return null;
-  }
+    const payload = decodeJwtPayload_(idToken);
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ idToken, exp: (payload && payload.exp) || 0 }));
+  } catch (err) { /* private browsing / storage disabled — just skip persistence */ }
 }
-
-function writeCacheJson_(name, obj) {
+function loadSession_() {
   try {
-    const file = getCacheFile_(name, true);
-    if (file) file.setContent(JSON.stringify(obj));
-  } catch (err) {
-    // Couldn't persist the snapshot — not fatal, just means the next
-    // request rebuilds it live again instead of hitting a fast cache.
-  }
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return '';
+    const data = JSON.parse(raw);
+    if (!data || !data.idToken || !data.exp) return '';
+    // 30s buffer so we don't hand out a token that expires mid-request.
+    if (Date.now() >= data.exp * 1000 - 30000) { sessionStorage.removeItem(SESSION_STORAGE_KEY); return ''; }
+    return data.idToken;
+  } catch (err) { return ''; }
+}
+function clearSession_() {
+  try { sessionStorage.removeItem(SESSION_STORAGE_KEY); } catch (err) { /* ignore */ }
 }
 
-function clearCacheJson_(name) {
-  try {
-    const file = getCacheFile_(name, false);
-    if (file) file.setContent('{}');
-  } catch (err) {
-    // nothing to invalidate if we can't reach the cache anyway
+function initSignIn() {
+  if (!GIS_CLIENT_ID || GIS_CLIENT_ID.indexOf('PASTE_YOUR') === 0) {
+    document.getElementById('login-error').textContent = 'Set GIS_CLIENT_ID at the top of the <script> to your Google OAuth Client ID.';
+    document.getElementById('login-error').classList.remove('hidden');
+    return;
   }
-}
-
-/* ============================================================
-   ORGANIZATIONAL UNITS
-   ============================================================ */
-const OUS_CACHE_FILE = 'org-units.json';
-
-function getOUs(forceRefresh) {
-  if (!forceRefresh) {
-    const cached = readCacheJson_(OUS_CACHE_FILE);
-    if (cached && cached.ous) return { ous: cached.ous, cached: true, cachedAt: cached.cachedAt || '' };
-  }
-  const resp = AdminDirectory.Orgunits.list('my_customer', { type: 'all' });
-  const ous = (resp.organizationUnits || []).map(function (ou) {
-    return { name: ou.name, orgUnitPath: ou.orgUnitPath };
-  });
-  if (!ous.some(function (ou) { return ou.orgUnitPath === '/'; })) {
-    ous.unshift({ name: '/ (root)', orgUnitPath: '/' });
-  }
-  ous.sort(function (a, b) { return a.orgUnitPath.localeCompare(b.orgUnitPath); });
-  writeCacheJson_(OUS_CACHE_FILE, { ous: ous, cachedAt: new Date().toISOString() });
-  return { ous: ous, cached: false };
-}
-
-/* ============================================================
-   FULL ORG USER DIRECTORY — fetched once, cached, filtered locally
-   ============================================================ */
-const USERS_CACHE_FILE = 'users-directory.json';
-
-/**
- * Fetches every user in the domain (paginated) and caches the flat list
- * persistently. Every OU-scoped lookup below (Roster tab, Global OU scope
- * stats, dept_head display scoping, course-owner resolution) filters this
- * one snapshot locally instead of issuing a separate Users.list call per
- * organizational unit or per course owner.
- */
-function getAllOrgUsersCached_(forceRefresh) {
-  if (!forceRefresh) {
-    const cached = readCacheJson_(USERS_CACHE_FILE);
-    if (cached && cached.users) return cached.users;
-  }
-  const users = [];
-  let pageToken;
-  do {
-    const resp = AdminDirectory.Users.list({
-      customer: 'my_customer',
-      maxResults: 500,
-      pageToken: pageToken,
-      orderBy: 'givenName',
+  const restored = loadSession_();
+  if (restored) {
+    state.idToken = restored;
+    apiGet({ action: 'whoAmI' }).then(data => {
+      state.me = { email: data.email, role: data.role, ouScope: data.ouScope };
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('app-shell').classList.remove('hidden');
+      applyRoleUI();
+      boot();
+    }).catch(() => {
+      // Stored token turned out to be invalid/expired server-side too —
+      // fall back to a normal sign-in instead of getting stuck.
+      clearSession_();
+      state.idToken = '';
+      renderGisButton_();
     });
-    (resp.users || []).forEach(function (u) {
-      users.push({
-        id: u.id,
-        primaryEmail: u.primaryEmail,
-        name: { fullName: u.name ? u.name.fullName : u.primaryEmail },
-        suspended: !!u.suspended,
-        orgUnitPath: u.orgUnitPath || '/',
-      });
+    return;
+  }
+  renderGisButton_();
+}
+
+function renderGisButton_() {
+  google.accounts.id.initialize({
+    client_id: GIS_CLIENT_ID,
+    callback: onCredential,
+    auto_select: true,
+  });
+  google.accounts.id.renderButton(document.getElementById('gis-button-container'), {
+    theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with',
+  });
+  google.accounts.id.prompt();
+}
+
+async function onCredential(response) {
+  state.idToken = response.credential;
+  try {
+    const data = await apiGet({ action: 'whoAmI' });
+    state.me = { email: data.email, role: data.role, ouScope: data.ouScope };
+    saveSession_(state.idToken);
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app-shell').classList.remove('hidden');
+    applyRoleUI();
+    boot();
+  } catch (err) {
+    state.idToken = '';
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = err.message || 'Sign-in failed.';
+    errEl.classList.remove('hidden');
+  }
+}
+
+function signOut() {
+  state.idToken = '';
+  state.me = null;
+  clearSession_();
+  google.accounts.id.disableAutoSelect();
+  document.getElementById('app-shell').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+}
+
+function applyRoleUI() {
+  const role = state.me.role;
+  document.getElementById('whoami-email').textContent = state.me.email;
+  document.getElementById('whoami-role').textContent = { superadmin: 'Super admin', admin: 'Admin', dept_head: 'Department head', auditor: 'Auditor (read-only)' }[role] || role;
+  // role-write: superadmin/admin/dept_head can enroll/remove students.
+  // role-admin: only superadmin/admin can manage courses/teachers/settings.
+  const canWrite = role === 'superadmin' || role === 'admin' || role === 'dept_head';
+  const isAdmin = role === 'superadmin' || role === 'admin';
+  document.querySelectorAll('.role-write').forEach(el => el.classList.toggle('role-hide', !canWrite));
+  document.querySelectorAll('.role-admin').forEach(el => el.classList.toggle('role-hide', !isAdmin));
+}
+
+/* ============================================================
+   VIEW SWITCHING (icon rail)
+   ============================================================ */
+const VIEW_IDS = ['summary', 'roster', 'classrooms', 'settings'];
+function setActiveView(view) {
+  if (view === 'settings' && state.me && !(state.me.role === 'superadmin' || state.me.role === 'admin')) return;
+  state.activeView = view;
+  VIEW_IDS.forEach(v => document.getElementById('view-' + v).classList.toggle('hidden', v !== view));
+  const visible = document.getElementById('view-' + view);
+  visible.classList.remove('fade-in'); void visible.offsetWidth; visible.classList.add('fade-in');
+  document.querySelectorAll('.rail-view-btn').forEach(btn => btn.classList.toggle('is-active', btn.dataset.view === view));
+  if (view === 'summary') renderSummaryStats();
+  if (view === 'settings') renderSettingsView();
+}
+
+/* ============================================================
+   SUMMARY VIEW
+   ============================================================ */
+async function loadOrgStats(forceRefresh) {
+  const data = await apiGetOptional({ action: 'getOrgStats', refresh: forceRefresh ? '1' : '0' }, 45000);
+  if (data) state.orgStats = data;
+  renderSummaryStats();
+}
+function renderSummaryStats() {
+  const total = state.courses.length;
+  const active = state.courses.filter(c => (c.courseState || '').toUpperCase() === 'ACTIVE').length;
+  const archived = state.courses.filter(c => (c.courseState || '').toUpperCase() === 'ARCHIVED').length;
+  const orphaned = state.courses.filter(isOwnerInactive).length;
+  document.getElementById('stat-total-courses').textContent = total || '0';
+  document.getElementById('stat-active-courses').textContent = active || '0';
+  document.getElementById('stat-archived-courses').textContent = archived || '0';
+  document.getElementById('stat-orphaned-courses').textContent = orphaned || '0';
+
+  const teacherSet = new Set(state.courses.map(getOwnerEmail).filter(Boolean));
+  const totalTeachers = state.orgStats?.totalTeachers ?? teacherSet.size;
+  const totalStudents = state.orgStats?.totalStudents ?? '—';
+  document.getElementById('stat-total-teachers').textContent = totalTeachers || '0';
+  document.getElementById('stat-total-students').textContent = totalStudents;
+
+  document.getElementById('stat-staff-count').textContent = state.orgStats?.totalStaff ?? totalTeachers ?? '—';
+  document.getElementById('stat-student-count').textContent = state.orgStats?.totalStudents ?? '—';
+}
+
+/* ============================================================
+   VIEW: STUDENTS & STAFF (OU roster inspector)
+   ============================================================ */
+async function fetchOUs(forceRefresh) {
+  const select = document.getElementById('ou-select');
+  select.innerHTML = `<option value="">Loading organizational units…</option>`;
+  select.disabled = true;
+  try {
+    const data = await apiGet({ action: 'getOUs', refresh: forceRefresh ? '1' : '0' });
+    const ous = data.ous || [];
+    state.ous = ous;
+    const opts = ous.length
+      ? `<option value="">Select an organizational unit…</option>` + ous.map(ou => `<option value="${escapeHtml(ou.orgUnitPath)}">${escapeHtml(ou.name || ou.orgUnitPath)}</option>`).join('')
+      : `<option value="">No organizational units found</option>`;
+    select.innerHTML = opts;
+    select.disabled = false;
+    populateOuDependentSelects();
+  } catch (err) {
+    select.innerHTML = `<option value="">Failed to load OUs</option>`;
+    showToast(err.message || 'Failed to load organizational units', 'error');
+  }
+}
+function populateOuDependentSelects() {
+  const opts = `<option value="">Select OU…</option>` + state.ous.map(ou => `<option value="${escapeHtml(ou.orgUnitPath)}">${escapeHtml(ou.name || ou.orgUnitPath)}</option>`).join('');
+  ['mapping-ou-select', 'setting-staff-ou', 'setting-student-ou'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const current = el.value;
+    el.innerHTML = opts;
+    if (current) el.value = current;
+  });
+  if (state.appSettings.staffOU) document.getElementById('setting-staff-ou').value = state.appSettings.staffOU;
+  if (state.appSettings.studentParentOU) document.getElementById('setting-student-ou').value = state.appSettings.studentParentOU;
+}
+
+async function fetchUsersByOU(orgUnitPath, forceRefresh) {
+  state.loadingUsers = true;
+  document.getElementById('ou-loading').classList.remove('hidden');
+  document.getElementById('user-search').disabled = true;
+  try {
+    const data = await apiGet({ action: 'getUsersByOU', orgUnitPath, refresh: forceRefresh ? '1' : '0' });
+    // Bug fix: some backends return users from sub-OUs too. Strictly keep
+    // only users whose orgUnitPath exactly matches the selected OU.
+    const raw = data.users || [];
+    state.users = raw.filter(u => {
+      const path = getUserOuPath(u);
+      return !path || path === orgUnitPath;
     });
-    pageToken = resp.nextPageToken;
-  } while (pageToken);
-  writeCacheJson_(USERS_CACHE_FILE, { users: users, cachedAt: new Date().toISOString() });
-  return users;
+    state.selectedUserIds.clear();
+    applyUserFilter();
+    document.getElementById('user-search').disabled = false;
+  } catch (err) {
+    state.users = []; state.filteredUsers = [];
+    renderUserTable();
+    showToast(err.message || 'Failed to load roster for this OU', 'error');
+  } finally {
+    state.loadingUsers = false;
+    document.getElementById('ou-loading').classList.add('hidden');
+    updateSelectionBar();
+  }
 }
 
-/** True if `path` equals orgUnitPath, or is nested underneath it. */
-function ouPathIsSelfOrChild_(path, orgUnitPath) {
-  const base = orgUnitPath.replace(/\/$/, '');
-  return path === base || path.indexOf(base + '/') === 0;
+function applyUserFilter() {
+  const q = state.searchQuery.trim().toLowerCase();
+  state.filteredUsers = !q ? state.users.slice() : state.users.filter(u =>
+    getUserName(u).toLowerCase().includes(q) || getUserEmail(u).toLowerCase().includes(q));
+  renderUserTable();
 }
-/** True if `path` is strictly nested underneath orgUnitPath (excludes orgUnitPath itself). */
-function ouPathIsChild_(path, orgUnitPath) {
-  const base = orgUnitPath.replace(/\/$/, '');
-  return path.indexOf(base + '/') === 0;
+
+function renderUserTable() {
+  const tbody = document.getElementById('user-table-body');
+  if (!state.selectedOU) {
+    tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Select an organizational unit to load its roster.</td></tr>`;
+    return;
+  }
+  if (!state.loadingUsers && state.filteredUsers.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No students match this OU or search.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = state.filteredUsers.map(u => {
+    const email = getUserEmail(u), name = getUserName(u), active = isUserActive(u), ouPath = getUserOuPath(u) || state.selectedOU;
+    const checked = state.selectedUserIds.has(email) ? 'checked' : '';
+    return `
+      <tr class="border-b border-[var(--paper)] last:border-0 hover:bg-[var(--paper)] transition">
+        <td class="px-4 py-3"><input type="checkbox" data-email="${escapeHtml(email)}" class="row-checkbox chk" ${checked}></td>
+        <td class="px-4 py-3"><div class="flex items-center gap-2.5">
+          <span class="w-7 h-7 rounded-full bg-[var(--accent-tint)] text-[var(--accent-ink)] text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
+          <span class="font-medium">${escapeHtml(name)}</span></div></td>
+        <td class="px-4 py-3 text-[var(--ink-soft)] font-mono text-xs">${escapeHtml(email)}</td>
+        <td class="px-4 py-3 text-[var(--ink-faint)] text-xs" title="${escapeHtml(ouPath)}">${escapeHtml(getClassGroupLabel(ouPath))}</td>
+        <td class="px-4 py-3"><span class="text-xs font-medium rounded-full px-2 py-0.5 ${active ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--bad-tint)] text-[var(--bad)]'}">${active ? 'Active' : 'Suspended'}</span></td>
+      </tr>`;
+  }).join('');
+  document.querySelectorAll('.row-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const email = cb.dataset.email;
+      if (cb.checked) state.selectedUserIds.add(email); else state.selectedUserIds.delete(email);
+      updateSelectionBar(); syncSelectAllState();
+    });
+  });
+  syncSelectAllState();
+}
+function syncSelectAllState() {
+  const selectAll = document.getElementById('select-all');
+  const visibleEmails = state.filteredUsers.map(getUserEmail);
+  selectAll.checked = visibleEmails.length > 0 && visibleEmails.every(e => state.selectedUserIds.has(e));
+}
+function updateSelectionBar() {
+  const bar = document.getElementById('selection-bar');
+  const count = state.selectedUserIds.size;
+  document.getElementById('selected-count').textContent = count;
+  bar.classList.toggle('hidden', count === 0);
 }
 
 /* ============================================================
-   USERS BY OU (Roster tab — exact OU only, not recursive)
+   VIEW: MANAGE CLASSROOMS
    ============================================================ */
-function getUsersByOU(orgUnitPath, forceRefresh) {
-  if (!orgUnitPath) throw new Error('orgUnitPath is required');
-  const all = getAllOrgUsersCached_(forceRefresh);
-  const norm = orgUnitPath.replace(/\/$/, '') || '/';
-  const users = all
-    .filter(function (u) { return (u.orgUnitPath || '/') === norm; })
-    .map(function (u) { return { primaryEmail: u.primaryEmail, name: u.name, suspended: u.suspended, orgUnitPath: u.orgUnitPath }; });
-  return { users: users };
+async function fetchCourses(forceRefresh) {
+  state.loadingCourses = true;
+  document.getElementById('courses-loading').classList.remove('hidden');
+  try {
+    const data = await apiGet({ action: 'getCourses', refresh: forceRefresh ? '1' : '0' }, 100000);
+    state.courses = data.courses || [];
+    state.loadingCourses = false;
+    applyCourseFilter();
+    renderSummaryStats();
+  } catch (err) {
+    state.courses = []; state.filteredCourses = [];
+    state.loadingCourses = false;
+    renderCourses();
+    renderSummaryStats();
+    showToast(err.message || 'Failed to load classrooms', 'error');
+  } finally {
+    state.loadingCourses = false;
+    document.getElementById('courses-loading').classList.add('hidden');
+  }
 }
 
-/**
- * Domain-wide directory search by name or email substring, used by the
- * "Add student(s)" popup. Previously that popup only searched whatever was
- * already sitting in the frontend's `state.users` — which was only ever
- * populated by visiting the Roster tab and picking an OU first, so anyone
- * not in that specific OU's list simply never matched, no matter what was
- * typed. Searching the cached full directory here fixes that regardless of
- * what OU (if any) the Roster tab last had loaded.
- */
-function searchUsers(query) {
-  const q = String(query || '').trim().toLowerCase();
-  if (!q) return { users: [] };
-  const all = getAllOrgUsersCached_(false);
-  const matches = all.filter(function (u) {
-    const name = ((u.name && u.name.fullName) || '').toLowerCase();
-    const email = (u.primaryEmail || '').toLowerCase();
-    return name.indexOf(q) !== -1 || email.indexOf(q) !== -1;
-  }).slice(0, 20);
-  return {
-    users: matches.map(function (u) { return { primaryEmail: u.primaryEmail, name: u.name, suspended: u.suspended, orgUnitPath: u.orgUnitPath }; }),
-  };
-}
+// Each "view" is its own filter tab — tabs map to real Classroom courseStates
+// plus one virtual view (orphaned = owner suspended/deleted) and an "All" catch-all.
+const COURSE_VIEWS = [
+  { id: 'active', label: 'Active', test: c => (c.courseState || '').toUpperCase() === 'ACTIVE',
+    hint: 'Classrooms currently in normal use.' },
+  { id: 'archived', label: 'Archived', test: c => (c.courseState || '').toUpperCase() === 'ARCHIVED',
+    hint: 'Read-only in Classroom. Unarchive to reactivate, or delete permanently.' },
+  { id: 'provisioned', label: 'Provisioned', test: c => (c.courseState || '').toUpperCase() === 'PROVISIONED',
+    hint: 'Created but awaiting the owning teacher to accept the invite in Classroom.' },
+  { id: 'declined', label: 'Declined', test: c => (c.courseState || '').toUpperCase() === 'DECLINED',
+    hint: 'The invited owner declined — these are effectively unused.' },
+  { id: 'orphaned', label: 'Owner inactive', test: isOwnerInactive,
+    hint: 'Owning teacher\u2019s account is suspended or deleted, across any state.' },
+  { id: 'all', label: 'All', test: () => true, hint: 'Every classroom regardless of state.' },
+];
+function currentView() { return COURSE_VIEWS.find(v => v.id === state.courseView) || COURSE_VIEWS[0]; }
 
-/**
- * Recursively lists every user under orgUnitPath, including sub-OUs, by
- * filtering the cached full-directory snapshot with our own prefix logic
- * (see the CACHING note at the top of this file for why this replaced the
- * old per-OU Users.list approach).
- *
- * includeSelf controls whether orgUnitPath's own directly-assigned users are
- * included, in addition to every sub-OU underneath it. Pass false for OUs
- * that are purely organizational containers with no users of their own —
- * e.g. a "Student parent OU" like /Students, where the real students live
- * in grade-level sub-OUs (/Students/2029, /Students/2030, ...) and the
- * parent itself has nobody directly assigned to it.
- */
-function getUsersUnderOuRecursive_(orgUnitPath, includeSelf, forceRefresh) {
-  if (includeSelf === undefined) includeSelf = true;
-  if (!orgUnitPath) return [];
-  const all = getAllOrgUsersCached_(forceRefresh);
-  return all.filter(function (u) {
-    const path = u.orgUnitPath || '/';
-    return includeSelf ? ouPathIsSelfOrChild_(path, orgUnitPath) : ouPathIsChild_(path, orgUnitPath);
+function renderCourseViewTabs() {
+  const wrap = document.getElementById('course-view-tabs');
+  wrap.innerHTML = COURSE_VIEWS.map(v => {
+    const count = state.courses.filter(v.test).length;
+    return `<button data-view="${v.id}" class="drawer-filter-tab ${state.courseView === v.id ? 'is-active' : ''}">${v.label} <span class="opacity-70">${count}</span></button>`;
+  }).join('');
+  wrap.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => { state.courseView = btn.dataset.view; applyCourseFilter(); });
   });
 }
 
-/* ============================================================
-   ORG-WIDE STATS (Summary tab)
-   ============================================================ */
-function getOrgStats(forceRefresh) {
-  const settings = readAppSettings_();
-  let totalStaff = null, totalStudents = null;
-
-  // Staff OU: staff may be directly assigned to this OU itself, so include it.
-  if (settings.staffOU) totalStaff = getUsersUnderOuRecursive_(settings.staffOU, true, forceRefresh).length;
-  // Student parent OU: only its sub-OUs (grade levels) actually hold
-  // students — the parent OU itself is just an organizational container.
-  if (settings.studentParentOU) totalStudents = getUsersUnderOuRecursive_(settings.studentParentOU, false, forceRefresh).length;
-
-  // Teacher count: distinct course owners across all known courses is a
-  // reasonable proxy and doesn't require walking every course's roster.
-  const courses = getCourses(false).courses;
-  const totalTeachers = uniq(courses.map(function (c) { return c.ownerEmail; }).filter(Boolean)).length;
-
-  return {
-    totalStaff: totalStaff != null ? totalStaff : totalTeachers,
-    totalStudents: totalStudents != null ? totalStudents : null,
-    totalTeachers: totalTeachers,
-  };
-}
-
-/* ============================================================
-   CLASS GROUP (OU) MAPPINGS — Settings tab
-   Tab "OuMappings": columns OrgUnitPath | Label
-   ============================================================ */
-function getOuMappings() {
-  const sheet = getOrCreateSheet_('OuMappings', ['OrgUnitPath', 'Label']);
-  const values = sheet.getDataRange().getValues();
-  const mappings = [];
-  for (let i = 1; i < values.length; i++) {
-    const orgUnitPath = String(values[i][0] || '').trim();
-    const label = String(values[i][1] || '').trim();
-    if (orgUnitPath && label) mappings.push({ orgUnitPath: orgUnitPath, label: label });
-  }
-  return { mappings: mappings };
-}
-
-function saveOuMapping(orgUnitPath, label) {
-  if (!orgUnitPath || !label) throw new Error('orgUnitPath and label are required');
-  const sheet = getOrCreateSheet_('OuMappings', ['OrgUnitPath', 'Label']);
-  const values = sheet.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0] || '').trim() === orgUnitPath) {
-      sheet.getRange(i + 1, 2).setValue(label);
-      return {};
-    }
-  }
-  sheet.appendRow([orgUnitPath, label]);
-  return {};
-}
-
-function deleteOuMapping(orgUnitPath) {
-  if (!orgUnitPath) throw new Error('orgUnitPath is required');
-  const sheet = getOrCreateSheet_('OuMappings', ['OrgUnitPath', 'Label']);
-  const values = sheet.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0] || '').trim() === orgUnitPath) {
-      sheet.deleteRow(i + 1);
-      return {};
-    }
-  }
-  return {}; // already gone — treat as success
-}
-
-/* ============================================================
-   APP SETTINGS — Settings tab (Global OU scope)
-   Tab "AppSettings": columns Key | Value
-   ============================================================ */
-function readAppSettings_() {
-  const sheet = getOrCreateSheet_('AppSettings', ['Key', 'Value']);
-  const values = sheet.getDataRange().getValues();
-  const map = {};
-  for (let i = 1; i < values.length; i++) {
-    const key = String(values[i][0] || '').trim();
-    if (key) map[key] = String(values[i][1] || '').trim();
-  }
-  return { staffOU: map.staffOU || '', studentParentOU: map.studentParentOU || '' };
-}
-
-function getAppSettings() {
-  return readAppSettings_();
-}
-
-function saveAppSettings(staffOU, studentParentOU) {
-  const sheet = getOrCreateSheet_('AppSettings', ['Key', 'Value']);
-  writeSettingKey_(sheet, 'staffOU', staffOU || '');
-  writeSettingKey_(sheet, 'studentParentOU', studentParentOU || '');
-  return {};
-}
-
-function writeSettingKey_(sheet, key, value) {
-  const values = sheet.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0] || '').trim() === key) {
-      sheet.getRange(i + 1, 2).setValue(value);
-      return;
-    }
-  }
-  sheet.appendRow([key, value]);
-}
-
-/* ============================================================
-   APP USERS — Settings tab (User & role management)
-   Reuses the existing "Roles" tab (Email | Role | OUScope) directly, so
-   there's a single source of truth for who can sign in and what they can do.
-   ============================================================ */
-function getAppUsers() {
-  const sheet = getRolesSheet_();
-  const values = sheet.getDataRange().getValues();
-  const users = [];
-  for (let i = 1; i < values.length; i++) {
-    const email = String(values[i][0] || '').trim();
-    const role = String(values[i][1] || '').trim();
-    if (email && role) users.push({ email: email, role: role, ouScope: String(values[i][2] || '').trim() });
-  }
-  return { users: users };
-}
-
-function addAppUser(email, role) {
-  if (!email || !role) throw new Error('email and role are required');
-  if (VALID_ROLES.indexOf(role) === -1) throw new Error('Unknown role: ' + role);
-  const sheet = getRolesSheet_();
-  const values = sheet.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0] || '').trim().toLowerCase() === email.toLowerCase()) {
-      sheet.getRange(i + 1, 2).setValue(role);
-      invalidateRoleCache(email);
-      return {};
-    }
-  }
-  sheet.appendRow([email, role, '']);
-  invalidateRoleCache(email);
-  return {};
-}
-
-/* ============================================================
-   COURSES — domain-wide, including owner-deactivated courses
-   ============================================================ */
-const COURSES_CACHE_FILE = 'courses.json';
-
-function getCourses(forceRefresh) {
-  if (!forceRefresh) {
-    const cached = readCacheJson_(COURSES_CACHE_FILE);
-    if (cached && cached.courses) return { courses: cached.courses, cached: true, cachedAt: cached.cachedAt || '' };
-  }
-
-  const allCourses = [];
-  let pageToken;
-  const courseStates = ['ACTIVE', 'ARCHIVED', 'PROVISIONED', 'DECLINED'];
-  do {
-    const resp = Classroom.Courses.list({ courseStates: courseStates, pageSize: 200, pageToken: pageToken });
-    (resp.courses || []).forEach(function (c) { allCourses.push(c); });
-    pageToken = resp.nextPageToken;
-  } while (pageToken);
-
-  const ownerIds = uniq(allCourses.map(function (c) { return c.ownerId; }).filter(Boolean));
-  const ownerStatus = resolveOwnerStatuses(ownerIds);
-
-  const courses = allCourses.map(function (c) {
-    const owner = ownerStatus[c.ownerId];
-    return {
-      id: c.id,
-      name: c.name,
-      section: c.section || '',
-      courseState: c.courseState,
-      ownerId: c.ownerId,
-      ownerEmail: owner ? owner.email : '',
-      ownerInactive: owner ? owner.inactive : true,
-      ownerOuPath: owner ? owner.orgUnitPath : '',
-      ownerFound: owner ? owner.found : false,
-      // Google Classroom exposes these natively on the Course resource.
-      creationTime: c.creationTime || '',
-      updateTime: c.updateTime || '', // best available proxy for "last active"
-    };
+function sortCourses(list) {
+  const [key, dir] = state.courseSort.split('_');
+  const sorted = list.slice();
+  sorted.sort((a, b) => {
+    let av, bv;
+    if (key === 'name') { av = getCourseName(a).toLowerCase(); bv = getCourseName(b).toLowerCase(); }
+    else if (key === 'owner') { av = getOwnerEmail(a).toLowerCase(); bv = getOwnerEmail(b).toLowerCase(); }
+    else { av = new Date(a[key] || 0).getTime(); bv = new Date(b[key] || 0).getTime(); }
+    if (av < bv) return dir === 'asc' ? -1 : 1;
+    if (av > bv) return dir === 'asc' ? 1 : -1;
+    return 0;
   });
-
-  writeCacheJson_(COURSES_CACHE_FILE, { courses: courses, cachedAt: new Date().toISOString() });
-  return { courses: courses, cached: false };
+  return sorted;
 }
 
-/**
- * Resolves each course owner's email + active status from the cached full
- * user directory (one Drive read) instead of one AdminDirectory.Users.get()
- * call per distinct owner — this was the single biggest contributor to slow
- * "Manage Classrooms" loads for schools with many teachers. Falls back to a
- * live lookup only for an owner ID that isn't in the cached snapshot yet
- * (e.g. an account created after the last directory refresh).
- */
-function resolveOwnerStatuses(ownerIds) {
-  const all = getAllOrgUsersCached_(false);
-  const byId = {};
-  all.forEach(function (u) { if (u.id) byId[u.id] = u; });
+function applyCourseFilter() {
+  const q = state.courseSearchQuery.trim().toLowerCase();
+  let list = state.courses.filter(currentView().test);
+  if (q) list = list.filter(c => getCourseName(c).toLowerCase().includes(q) || getOwnerEmail(c).toLowerCase().includes(q));
+  state.filteredCourses = sortCourses(list);
+  renderCourseViewTabs();
+  renderCourses();
+}
 
-  const out = {};
-  ownerIds.forEach(function (id) {
-    const cached = byId[id];
-    if (cached) {
-      out[id] = { email: cached.primaryEmail, inactive: !!cached.suspended, orgUnitPath: cached.orgUnitPath || '', found: true };
-      return;
-    }
+function renderCourses() {
+  const list = document.getElementById('courses-list');
+  document.getElementById('courses-count') && (document.getElementById('courses-count').textContent = state.filteredCourses.length);
+  if (state.loadingCourses) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Loading classrooms…</li>`; return; }
+  if (!state.filteredCourses.length) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms match this view.</li>`; return; }
+  list.innerHTML = state.filteredCourses.map(c => {
+    const id = getCourseId(c), name = getCourseName(c), section = getCourseSection(c), st = (c.courseState || '').toUpperCase();
+    const checked = state.selectedCourseIds.has(id) ? 'checked' : '';
+    const isSelected = state.courseId === id;
+    return `
+      <li class="drawer-course-item course-row ${isSelected ? 'is-selected' : ''}" data-course-id="${escapeHtml(id)}">
+        <div class="flex items-start gap-2">
+          <input type="checkbox" class="course-checkbox chk role-write mt-0.5 shrink-0" data-id="${escapeHtml(id)}" ${checked}>
+          <div class="min-w-0 flex-1 course-open">
+            <p class="text-sm font-medium truncate">${escapeHtml(name)}</p>
+            <p class="text-xs text-[var(--ink-faint)] truncate">${escapeHtml(section || id)} ${isOwnerInactive(c) ? `<span class="text-[var(--warn)]">· owner inactive</span>` : ''} ${isOwnerOutsideStaffOu(c) ? `<span class="text-[var(--warn)]">· non-staff owner</span>` : ''}</p>
+            <p class="text-[10px] text-[var(--ink-faint)] truncate mt-0.5">Created ${formatShortDate(c.creationTime)} &middot; Active ${formatShortDate(c.updateTime)}</p>
+          </div>
+        </div>
+      </li>`;
+  }).join('');
+
+  list.querySelectorAll('.course-open').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.closest('.drawer-course-item').dataset.courseId;
+      state.courseId = id;
+      fetchCourseMembers(id);
+      renderCourses();
+    });
+  });
+  list.querySelectorAll('.course-checkbox').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const id = cb.dataset.id;
+      if (cb.checked) state.selectedCourseIds.add(id); else state.selectedCourseIds.delete(id);
+      updateCourseBulkBar();
+    });
+  });
+  updateCourseBulkBar();
+}
+
+function confirmSingleCourseOp(courseId, action, title, body, submitLabel, submitClass) {
+  openModal(modalShell(title, `<p class="text-sm text-[var(--ink-soft)]">${body}</p>`, submitLabel, submitClass));
+  wireModalButtons(async () => {
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Working…');
     try {
-      const u = AdminDirectory.Users.get(id, { projection: 'basic' });
-      out[id] = { email: u.primaryEmail, inactive: !!u.suspended, orgUnitPath: u.orgUnitPath || '', found: true };
-    } catch (err) {
-      // Not resolvable at all against this Workspace customer — e.g. a
-      // fully external/guest account, as opposed to simply being outside
-      // the configured Staff OU (which IS resolvable, just flagged
-      // client-side by comparing orgUnitPath to the Staff OU setting).
-      out[id] = { email: '', inactive: true, orgUnitPath: '', found: false };
-    }
-  });
-  return out;
-}
-
-function uniq(arr) {
-  const seen = {};
-  const out = [];
-  arr.forEach(function (v) { if (!seen[v]) { seen[v] = true; out.push(v); } });
-  return out;
-}
-
-function invalidateCourseCache() {
-  clearCacheJson_(COURSES_CACHE_FILE);
-}
-
-/**
- * Updates courseState for the given IDs directly in the cached course
- * list, instead of invalidating the whole cache. Archive/unarchive/delete
- * always know exactly what changed, so there's no need to pay for a full
- * live re-fetch (paginated Courses.list + owner resolution across every
- * course in the domain) just to reflect a one- or few-course change — that
- * full-rebuild pattern was the actual reason bulk archive/unarchive/delete
- * used to feel slow, not the Classroom API calls themselves.
- */
-function patchCoursesCacheState_(courseIds, newState) {
-  const cached = readCacheJson_(COURSES_CACHE_FILE);
-  if (!cached || !cached.courses) return; // nothing cached yet — next real load builds it fresh anyway
-  const idSet = {};
-  courseIds.forEach(function (id) { idSet[id] = true; });
-  let changed = false;
-  cached.courses = cached.courses.map(function (c) {
-    if (idSet[c.id]) { changed = true; return Object.assign({}, c, { courseState: newState }); }
-    return c;
-  });
-  if (changed) writeCacheJson_(COURSES_CACHE_FILE, cached);
-}
-
-function removeCoursesFromCache_(courseIds) {
-  const cached = readCacheJson_(COURSES_CACHE_FILE);
-  if (!cached || !cached.courses) return;
-  const idSet = {};
-  courseIds.forEach(function (id) { idSet[id] = true; });
-  cached.courses = cached.courses.filter(function (c) { return !idSet[c.id]; });
-  writeCacheJson_(COURSES_CACHE_FILE, cached);
-}
-
-/* ============================================================
-   COURSE CRUD
-   ============================================================ */
-function createCourse(body) {
-  const course = {
-    name: body.name,
-    section: body.section || '',
-    description: body.description || '',
-    room: body.room || '',
-    ownerId: body.ownerEmail || 'me',
-    courseState: 'PROVISIONED', // Classroom requires PROVISIONED on create; owner must accept invite in some domains
-  };
-  const created = Classroom.Courses.create(course);
-  // A brand-new course isn't in the cache yet to patch — invalidating here
-  // is correct and cheap since course creation is comparatively rare.
-  invalidateCourseCache();
-  return { course: created };
-}
-
-function setCourseState(courseId, newState) {
-  if (!courseId) throw new Error('courseId is required');
-  Classroom.Courses.patch({ courseState: newState }, courseId, { updateMask: 'courseState' });
-  return {};
-}
-
-function deleteCourse(courseId) {
-  if (!courseId) throw new Error('courseId is required');
-  // The Classroom API only allows deleting ARCHIVED or PROVISIONED courses.
-  Classroom.Courses.remove(courseId);
-  return {};
-}
-
-function bulkCourseOp(courseIds, fn, onSuccessIds) {
-  const results = { ok: [], failed: [] };
-  (courseIds || []).forEach(function (id) {
-    try { fn(id); results.ok.push(id); } catch (err) { results.failed.push({ id: id, error: err.message }); }
-  });
-  // One cache patch for the whole batch (not one per course) — cheap even
-  // for a large selection, and avoids ever falling back to a full rebuild.
-  if (onSuccessIds && results.ok.length) onSuccessIds(results.ok);
-  return { results: results };
-}
-
-/* ============================================================
-   COURSE MEMBERS
-   ============================================================ */
-/**
- * Loading a course's teachers + students previously meant two full
- * paginated Classroom API calls (plus a Courses.get for the owner) on
- * every single click, even re-clicking the same course seconds later.
- * Cached the same way as courses/OUs/the user directory — persisted in
- * Drive, served instantly until something actually changes. Unlike the
- * user directory (refreshed only on demand), this cache is invalidated
- * automatically and precisely: every mutation below that touches a
- * specific course's roster (add/remove teacher or student, primary
- * teacher change, bulk enroll/remove) clears just that course's cached
- * entry, so it can't ever go stale after something done through this app.
- * A manual refresh (passed through from the frontend) is still available
- * for the case where someone changed rosters directly in Classroom itself.
- */
-function courseMembersCacheFile_(courseId) {
-  return 'course-members-' + courseId + '.json';
-}
-function invalidateCourseMembersCache_(courseId) {
-  if (!courseId) return;
-  clearCacheJson_(courseMembersCacheFile_(courseId));
-}
-
-function getCourseMembers(courseId, forceRefresh) {
-  if (!courseId) throw new Error('courseId is required');
-  if (!forceRefresh) {
-    const cached = readCacheJson_(courseMembersCacheFile_(courseId));
-    if (cached && cached.teachers && cached.students) {
-      return { teachers: cached.teachers, students: cached.students, cached: true, cachedAt: cached.cachedAt || '' };
-    }
-  }
-
-  const teachers = listAllPages(function (pageToken) {
-    return Classroom.Courses.Teachers.list(courseId, { pageToken: pageToken, pageSize: 100 });
-  }, 'teachers');
-  const students = listAllPages(function (pageToken) {
-    return Classroom.Courses.Students.list(courseId, { pageToken: pageToken, pageSize: 100 });
-  }, 'students');
-
-  let ownerId = '';
-  try { ownerId = Classroom.Courses.get(courseId).ownerId; } catch (err) { /* ignore */ }
-
-  const result = {
-    teachers: teachers.map(function (t) { return Object.assign({}, t, { isPrimary: t.userId === ownerId }); }),
-    students: students,
-  };
-  writeCacheJson_(courseMembersCacheFile_(courseId), Object.assign({ cachedAt: new Date().toISOString() }, result));
-  return Object.assign({ cached: false }, result);
-}
-
-function listAllPages(fetchPage, key) {
-  const items = [];
-  let pageToken;
-  do {
-    const resp = fetchPage(pageToken);
-    (resp[key] || []).forEach(function (item) { items.push(item); });
-    pageToken = resp.nextPageToken;
-  } while (pageToken);
-  return items;
-}
-
-/* ============================================================
-   TEACHERS
-   ============================================================ */
-function addTeacher(courseId, teacherEmail) {
-  if (!courseId || !teacherEmail) throw new Error('courseId and teacherEmail are required');
-  Classroom.Courses.Teachers.create({ userId: teacherEmail }, courseId);
-  invalidateCourseMembersCache_(courseId);
-  return {};
-}
-
-function removeTeacher(courseId, teacherEmail) {
-  if (!courseId || !teacherEmail) throw new Error('courseId and teacherEmail are required');
-  Classroom.Courses.Teachers.remove(courseId, teacherEmail);
-  invalidateCourseMembersCache_(courseId);
-  return {};
-}
-
-/**
- * "Primary teacher" = the course owner (ownerId). The Classroom API only
- * allows changing ownerId via Courses.patch, and Google restricts this:
- * the target user must already be a teacher on the course, and the domain
- * must allow ownership transfer (some Workspace domains disable this
- * entirely). If this call fails, that's a Google-side policy restriction,
- * not a bug — the UI surfaces the API's error message directly.
- */
-function setPrimaryTeacher(courseId, teacherEmail) {
-  if (!courseId || !teacherEmail) throw new Error('courseId and teacherEmail are required');
-  const user = AdminDirectory.Users.get(teacherEmail, { projection: 'basic' });
-  Classroom.Courses.patch({ ownerId: user.id }, courseId, { updateMask: 'ownerId' });
-  invalidateCourseCache();
-  invalidateCourseMembersCache_(courseId);
-  return {};
-}
-
-/* ============================================================
-   STUDENTS
-   ============================================================ */
-function addStudent(courseId, studentEmail) {
-  if (!courseId || !studentEmail) throw new Error('courseId and studentEmail are required');
-  Classroom.Courses.Students.create({ userId: studentEmail }, courseId);
-  invalidateCourseMembersCache_(courseId);
-  return {};
-}
-
-function removeStudent(courseId, studentEmail) {
-  if (!courseId || !studentEmail) throw new Error('courseId and studentEmail are required');
-  Classroom.Courses.Students.remove(courseId, studentEmail);
-  invalidateCourseMembersCache_(courseId);
-  return {};
-}
-
-function bulkAddStudents(courseId, emails, user) {
-  const results = { ok: [], failed: [] };
-  (emails || []).forEach(function (email) {
-    try {
-      if (user.role === 'dept_head') requireEmailInScope(user, email);
-      addStudent(courseId, email);
-      results.ok.push(email);
-    } catch (err) {
-      results.failed.push({ email: email, error: err.message });
-    }
-  });
-  return { results: results };
-}
-
-function bulkAddStudentsByOU(courseId, orgUnitPath) {
-  // Force-fresh: this actually enrolls real students, so it shouldn't rely
-  // on a directory snapshot that might be stale — unlike read-only display.
-  const users = getUsersByOU(orgUnitPath, true).users;
-  const results = { ok: [], failed: [] };
-  users.forEach(function (u) {
-    try { addStudent(courseId, u.primaryEmail); results.ok.push(u.primaryEmail); }
-    catch (err) { results.failed.push({ email: u.primaryEmail, error: err.message }); }
-  });
-  return { results: results };
-}
-
-function bulkRemoveStudents(courseId, emails, user) {
-  const results = { ok: [], failed: [] };
-  (emails || []).forEach(function (email) {
-    try {
-      if (user.role === 'dept_head') requireEmailInScope(user, email);
-      removeStudent(courseId, email);
-      results.ok.push(email);
-    } catch (err) {
-      results.failed.push({ email: email, error: err.message });
-    }
-  });
-  return { results: results };
-}
-
-/* ============================================================
-   BULK CREATE FROM FILE — Manage Classrooms → Bulk Create
-   CSV only, one row per student:
-     Column A: classroom name
-     Column B: primary teacher email
-     Column C: student email
-   Repeat the classroom name (and teacher email) on every row belonging to
-   that classroom. Rows sharing the same classroom name (column A) are
-   grouped into a single course — using the first non-blank teacher email
-   seen for that name, and every distinct student email collected across
-   its rows. An optional header row is fine and gets auto-detected/skipped.
-   (.xlsx isn't parsed here — Apps Script has no built-in XLSX reader; ask
-   users to save as CSV, or convert server-side with a library if needed.)
-   ============================================================ */
-function bulkCreateCoursesFromFile(fileName, fileBase64) {
-  if (!fileBase64) throw new Error('No file received.');
-  if (/\.xlsx?$/i.test(fileName || '')) {
-    throw new Error('Please upload a .csv file — Excel (.xlsx/.xls) isn\'t supported yet.');
-  }
-  const csvText = Utilities.newBlob(Utilities.base64Decode(fileBase64)).getDataAsString();
-  const allRows = Utilities.parseCsv(csvText);
-  if (!allRows.length) throw new Error('The file is empty.');
-
-  // An optional header row is fine — skipped if column A reads like a
-  // label rather than an actual classroom name.
-  const firstCell = String(allRows[0][0] || '').trim().toLowerCase();
-  const looksLikeHeader = ['name', 'classroom', 'classroom name', 'class', 'class name'].indexOf(firstCell) !== -1;
-  const dataRows = looksLikeHeader ? allRows.slice(1) : allRows;
-
-  // Group rows by classroom name (column A), preserving first-seen order.
-  // Column B (teacher email) and column A are expected to repeat on every
-  // row for that classroom; column C (student email) is one student per
-  // row. The first non-blank teacher email seen for a name wins; student
-  // emails are deduplicated within the group.
-  const order = [];
-  const groups = {}; // name -> { teacherEmail, studentEmails: [] }
-  dataRows.forEach(function (row) {
-    const name = String(row[0] || '').trim();
-    if (!name) return;
-    const teacherEmail = String(row[1] || '').trim();
-    const studentEmail = String(row[2] || '').trim();
-    if (!groups[name]) {
-      groups[name] = { teacherEmail: '', studentEmails: [] };
-      order.push(name);
-    }
-    if (teacherEmail && !groups[name].teacherEmail) groups[name].teacherEmail = teacherEmail;
-    if (studentEmail && groups[name].studentEmails.indexOf(studentEmail) === -1) groups[name].studentEmails.push(studentEmail);
-  });
-
-  if (!order.length) {
-    throw new Error('No classroom rows found. Expected column A = classroom name, column B = primary teacher email, column C = student email — one row per student.');
-  }
-
-  const results = { ok: [], failed: [] };
-  order.forEach(function (name) {
-    const group = groups[name];
-    try {
-      const created = createCourse({ name: name, ownerEmail: group.teacherEmail });
-      const courseId = created.course.id;
-      if (group.teacherEmail) {
-        try { addTeacher(courseId, group.teacherEmail); setPrimaryTeacher(courseId, group.teacherEmail); } catch (err) { /* owner may already be set via ownerId on create */ }
+      await apiPost({ action, courseId });
+      showToast(`${title} succeeded.`, 'success');
+      closeModal();
+      // Patch the one changed course locally instead of forcing a full,
+      // live re-fetch of every course in the domain (which is what made
+      // this feel slow — the archive/delete call itself is quick; the
+      // subsequent full-list rebuild for a single-course change wasn't).
+      // The server-side cache was already invalidated, so a real reload
+      // still picks this up correctly either way.
+      if (action === 'deleteCourse') {
+        state.courses = state.courses.filter(c => getCourseId(c) !== courseId);
+        if (state.courseId === courseId) { state.courseId = ''; showWorkspaceEmpty(); }
+      } else {
+        const newState = action === 'archiveCourse' ? 'ARCHIVED' : 'ACTIVE';
+        state.courses = state.courses.map(c => getCourseId(c) === courseId ? Object.assign({}, c, { courseState: newState }) : c);
       }
-      group.studentEmails.forEach(function (email) {
-        try { addStudent(courseId, email); } catch (err) { /* individual student failures are swallowed to keep import moving */ }
-      });
-      results.ok.push(name);
+      renderCourses();
+      loadOrgStats();
     } catch (err) {
-      results.failed.push({ name: name, error: err.message });
+      showToast(err.message || `${title} failed`, 'error');
+      resetButtonLoading(btn, submitLabel);
     }
   });
-  invalidateCourseCache();
-  return {
-    message: 'Created ' + results.ok.length + ' classroom(s)' + (results.failed.length ? ', ' + results.failed.length + ' failed.' : '.'),
-    results: results,
-  };
+}
+
+function updateCourseBulkBar() {
+  const bar = document.getElementById('course-bulk-bar');
+  const count = state.selectedCourseIds.size;
+  document.getElementById('course-selected-count').textContent = count;
+  bar.classList.toggle('hidden', count === 0);
+  const view = state.courseView;
+  document.querySelector('.bulk-archive-btn').classList.toggle('hidden', view === 'archived');
+  document.querySelector('.bulk-unarchive-btn').classList.toggle('hidden', view !== 'archived');
+}
+
+function showWorkspaceEmpty() {
+  document.getElementById('workspace-empty').classList.remove('hidden');
+  document.getElementById('workspace-loaded').classList.add('hidden');
+}
+function showWorkspaceLoaded() {
+  document.getElementById('workspace-empty').classList.add('hidden');
+  document.getElementById('workspace-loaded').classList.remove('hidden');
+}
+
+async function fetchCourseMembers(courseId, forceRefresh) {
+  showWorkspaceLoaded();
+  const course = state.courses.find(c => getCourseId(c) === courseId);
+  document.getElementById('workspace-course-name').textContent = course ? getCourseName(course) : courseId;
+  document.getElementById('workspace-course-id').textContent = courseId;
+  document.getElementById('workspace-course-dates').textContent =
+    `Created ${formatShortDate(course?.creationTime)} \u00b7 Last active ${formatShortDate(course?.updateTime)}`;
+  const ownerEl = document.getElementById('workspace-course-owner');
+  if (course && course.ownerEmail) {
+    const outside = isOwnerOutsideStaffOu(course);
+    ownerEl.classList.remove('hidden');
+    ownerEl.innerHTML = `Owner: <span class="text-[var(--ink-soft)]">${escapeHtml(course.ownerEmail)}</span>` +
+      (outside ? ` <span class="text-[var(--warn)] font-medium">· non-staff owner${course.ownerOuPath ? ' (' + escapeHtml(course.ownerOuPath) + ')' : ''}</span>` : '');
+  } else {
+    ownerEl.classList.add('hidden');
+    ownerEl.innerHTML = '';
+  }
+  document.getElementById('teachers-loading').classList.remove('hidden');
+  document.getElementById('students-loading').classList.remove('hidden');
+  ['btn-open-add-teacher','btn-open-add-student','btn-export-grades','btn-export-topics'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+  try {
+    const data = await apiGet({ action: 'getCourseMembers', courseId, refresh: forceRefresh ? '1' : '0' }, 60000);
+    state.teachers = data.teachers || [];
+    state.students = data.students || [];
+    state.selectedStudentIds.clear();
+    renderMembers();
+    ['btn-open-add-teacher','btn-open-add-student','btn-export-grades','btn-export-topics'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+    if (forceRefresh) showToast('Teachers and students refreshed.', 'success');
+  } catch (err) {
+    state.teachers = []; state.students = [];
+    renderMembers();
+    showToast(err.message || 'Failed to load course roster', 'error');
+  } finally {
+    document.getElementById('teachers-loading').classList.add('hidden');
+    document.getElementById('students-loading').classList.add('hidden');
+    renderCourses();
+  }
+}
+
+function filteredSortedStudents() {
+  const q = state.studentSearchQuery.trim().toLowerCase();
+  let list = state.students.slice();
+  if (q) list = list.filter(s => getMemberName(s).toLowerCase().includes(q) || getMemberEmail(s).toLowerCase().includes(q));
+  list.sort((a, b) => {
+    const av = getMemberName(a).toLowerCase(), bv = getMemberName(b).toLowerCase();
+    return state.studentSort === 'name_desc' ? bv.localeCompare(av) : av.localeCompare(bv);
+  });
+  return list;
+}
+
+function renderMembers() {
+  document.getElementById('teachers-count').textContent = state.teachers.length;
+  document.getElementById('students-count').textContent = state.students.length;
+
+  const selectAllBtn = document.getElementById('btn-select-all-students');
+  const allSelected = state.students.length > 0 && state.students.every(s => state.selectedStudentIds.has(getMemberEmail(s)));
+  selectAllBtn.textContent = allSelected ? 'Unselect all' : 'Select all';
+
+  const teachersList = document.getElementById('teachers-list');
+  teachersList.innerHTML = state.teachers.length ? state.teachers.map(t => memberRow(t, 'teacher')).join('')
+    : `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No teachers found for this course.' : 'Load a course to see its teachers.'}</li>`;
+
+  const studentsList = document.getElementById('students-list');
+  const visibleStudents = filteredSortedStudents();
+  studentsList.innerHTML = visibleStudents.length ? visibleStudents.map(s => memberRow(s, 'student')).join('')
+    : `<li class="col-span-full px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No students match.' : 'Load a course to see its students.'}</li>`;
+
+  document.querySelectorAll('.remove-member-btn').forEach(btn => btn.addEventListener('click', () => confirmRemoveMember(btn.dataset.email, btn.dataset.role)));
+  document.querySelectorAll('.make-primary-btn').forEach(btn => btn.addEventListener('click', () => confirmMakePrimary(btn.dataset.email)));
+  document.querySelectorAll('.student-checkbox').forEach(cb => cb.addEventListener('change', () => {
+    const email = cb.dataset.email;
+    if (cb.checked) state.selectedStudentIds.add(email); else state.selectedStudentIds.delete(email);
+    updateStudentBulkBar();
+  }));
+  updateStudentBulkBar();
+}
+
+function updateStudentBulkBar() {
+  const bar = document.getElementById('student-bulk-bar');
+  const count = state.selectedStudentIds.size;
+  document.getElementById('student-selected-count').textContent = count;
+  bar.classList.toggle('hidden', count === 0);
+}
+
+function memberRow(m, role) {
+  const name = getMemberName(m), email = getMemberEmail(m);
+  if (role === 'student') {
+    return `
+      <li class="flex items-center gap-1.5 pl-2 pr-1 py-1.5 rounded-lg border border-[var(--line)] bg-[var(--panel-2)]/70 min-w-0" title="${escapeHtml(email)}">
+        <input type="checkbox" class="student-checkbox chk role-write shrink-0 w-3.5 h-3.5" data-email="${escapeHtml(email)}" ${state.selectedStudentIds.has(email) ? 'checked' : ''}>
+        <span class="w-5 h-5 rounded-full bg-[var(--good-tint)] text-[var(--good)] text-[9px] font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
+        <p class="text-xs font-medium truncate flex-1 min-w-0">${escapeHtml(name)}</p>
+        <button class="remove-member-btn btn-icon-tint-bad role-write shrink-0 w-6 h-6 flex items-center justify-center rounded-md transition focus-ring" data-email="${escapeHtml(email)}" data-role="student" title="Remove">
+          <span class="w-3.5 h-3.5 block">${ICONS.trash}</span>
+        </button>
+      </li>`;
+  }
+  const accent = 'bg-[var(--accent-tint)] text-[var(--accent-ink)]';
+  const isPrimary = m.isPrimary;
+  return `
+    <li class="px-4 py-3 flex items-center gap-3">
+      <span class="w-8 h-8 rounded-full ${accent} text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-medium truncate flex items-center gap-1.5">${escapeHtml(name)} ${isPrimary ? `<span class="w-3.5 h-3.5 text-[var(--accent)]" title="Primary teacher">${ICONS.star}</span>` : ''}</p>
+        <p class="text-xs text-[var(--ink-faint)] font-mono truncate">${escapeHtml(email)}</p>
+      </div>
+      ${!isPrimary ? `<button class="make-primary-btn btn-chip btn-chip-accent role-admin shrink-0 transition focus-ring" data-email="${escapeHtml(email)}" title="Make primary teacher">Make primary</button>` : ''}
+      <button class="remove-member-btn btn-icon-tint-bad role-write shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition focus-ring" data-email="${escapeHtml(email)}" data-role="teacher" title="Remove">
+        <span class="w-4 h-4 block">${ICONS.trash}</span>
+      </button>
+    </li>`;
 }
 
 /* ============================================================
-   EXPORTS — CSV built server-side, handed to the frontend as text
+   MODALS
    ============================================================ */
-function exportGradesCsv(courseId) {
-  if (!courseId) throw new Error('courseId is required');
-  const students = listAllPages(function (pageToken) {
-    return Classroom.Courses.Students.list(courseId, { pageToken: pageToken, pageSize: 100 });
-  }, 'students');
-  const studentNameById = {};
-  students.forEach(function (s) {
-    studentNameById[s.userId] = (s.profile && s.profile.name && s.profile.name.fullName) || s.userId;
+function openModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-backdrop').classList.remove('hidden');
+}
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.add('hidden');
+  document.getElementById('modal-content').innerHTML = '';
+}
+document.getElementById('modal-backdrop').addEventListener('click', (e) => { if (e.target.id === 'modal-backdrop') closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+function modalShell(title, bodyHtml, submitLabel, submitClass) {
+  return `
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-bold tracking-tight">${title}</h3>
+      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
+    </div>
+    ${bodyHtml}
+    <div class="flex justify-end gap-2 mt-4">
+      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
+      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white rounded-lg transition focus-ring ${submitClass || 'btn-primary'}">${submitLabel}</button>
+    </div>`;
+}
+function wireModalButtons(onSubmit) {
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-submit').addEventListener('click', onSubmit);
+}
+
+function openCreateCourseModal() {
+  openModal(modalShell('New classroom', `
+    <div class="space-y-3">
+      <div><label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Name</label>
+        <input id="cc-name" type="text" placeholder="e.g. AP Biology" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Section</label>
+          <input id="cc-section" type="text" placeholder="Period 3" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></div>
+        <div><label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Room</label>
+          <input id="cc-room" type="text" placeholder="Rm 204" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></div>
+      </div>
+      <div><label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Owner (primary teacher) email</label>
+        <input id="cc-owner" type="email" placeholder="teacher@school.edu" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></div>
+      <p class="text-xs text-[var(--ink-faint)]">New courses are created in "Provisioned" state; the owning teacher must accept the invite in Classroom before it becomes Active (this is a Google Classroom API requirement, not a limitation of this tool).</p>
+    </div>
+  `, 'Create'), 'Cancel');
+  wireModalButtons(async () => {
+    const name = document.getElementById('cc-name').value.trim();
+    if (!name) { document.getElementById('cc-name').focus(); return; }
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Creating…');
+    try {
+      await apiPost({
+        action: 'createCourse', name,
+        section: document.getElementById('cc-section').value.trim(),
+        room: document.getElementById('cc-room').value.trim(),
+        ownerEmail: document.getElementById('cc-owner').value.trim() || undefined,
+      });
+      showToast(`Classroom "${name}" created.`, 'success');
+      closeModal();
+      fetchCourses(true);
+    } catch (err) {
+      showToast(err.message || 'Failed to create classroom', 'error');
+      resetButtonLoading(btn, 'Create');
+    }
   });
+}
 
-  const courseWork = listAllPages(function (pageToken) {
-    return Classroom.Courses.CourseWork.list(courseId, { pageToken: pageToken, pageSize: 100 });
-  }, 'courseWork');
+// Bulk Create — Excel/CSV upload to create classrooms, assign primary
+// teachers, and enroll students in bulk. Parses the file locally to show a
+// preview, then hands the raw file to a bulkCreateCoursesFromFile action.
+function openBulkCreateModal() {
+  openModal(modalShell('Bulk create classrooms', `
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Upload a CSV — one row per student: column A = classroom name, column B = primary teacher email, column C = student email. Repeat the classroom name and teacher email on every row for that classroom; rows sharing the same name become one classroom.</p>
+    <label class="flex flex-col items-center justify-center gap-2 border border-dashed border-[var(--line)] rounded-lg py-8 cursor-pointer hover:border-[var(--ink-faint)] transition">
+      <span class="w-6 h-6 text-[var(--ink-faint)]">${ICONS.upload}</span>
+      <span class="text-sm text-[var(--ink-soft)]">Click to choose a .csv or .xlsx file</span>
+      <input id="bulk-file-input" type="file" accept=".csv,.xlsx,.xls" class="hidden">
+    </label>
+    <p id="bulk-file-name" class="text-xs text-[var(--ink-faint)] mt-2"></p>
+  `, 'Upload &amp; create', 'btn-tint-good'));
+  const fileInput = document.getElementById('bulk-file-input');
+  let picked = null;
+  fileInput.addEventListener('change', () => {
+    picked = fileInput.files[0] || null;
+    document.getElementById('bulk-file-name').textContent = picked ? `Selected: ${picked.name}` : '';
+  });
+  wireModalButtons(async () => {
+    if (!picked) { showToast('Choose a file first.', 'error'); return; }
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Uploading…');
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(picked);
+      });
+      const data = await apiPost({ action: 'bulkCreateCoursesFromFile', fileName: picked.name, fileBase64: base64 }, 180000);
+      showToast(data?.message || 'Bulk import submitted.', 'success');
+      closeModal();
+      fetchCourses(true);
+    } catch (err) {
+      showToast(err.message || 'Bulk import failed', 'error');
+      resetButtonLoading(btn, 'Upload &amp; create');
+    }
+  });
+}
 
-  const rows = [['Student', 'Student Email', 'Assignment', 'Max Points', 'Assigned Grade', 'State']];
-  courseWork.forEach(function (cw) {
-    const submissions = listAllPages(function (pageToken) {
-      return Classroom.Courses.CourseWork.StudentSubmissions.list(courseId, cw.id, { pageToken: pageToken, pageSize: 100 });
-    }, 'studentSubmissions');
-    submissions.forEach(function (sub) {
-      const student = students.filter(function (s) { return s.userId === sub.userId; })[0];
-      const email = student && student.profile ? student.profile.emailAddress || '' : '';
-      rows.push([
-        studentNameById[sub.userId] || sub.userId,
-        email,
-        cw.title || '',
-        cw.maxPoints != null ? cw.maxPoints : '',
-        sub.assignedGrade != null ? sub.assignedGrade : '',
-        sub.state || '',
-      ]);
+// Dynamic teacher assignment: defaults to setting the primary teacher when
+// the course has none yet; otherwise pre-fills the current primary and
+// offers an "Add co-teacher" flow.
+function openAddTeacherModal() {
+  const primary = state.teachers.find(t => t.isPrimary);
+  const primaryEmail = primary ? getMemberEmail(primary) : '';
+  openModal(modalShell('Assign teacher', `
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span></p>
+    ${primary ? `
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Primary teacher</label>
+      <input type="text" value="${escapeHtml(getMemberName(primary))} · ${escapeHtml(primaryEmail)}" disabled class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm mb-3 opacity-70">
+      <button type="button" id="at-add-co" class="btn-chip btn-chip-accent mb-2 focus-ring">+ Add co-teacher</button>
+      <div id="at-co-panel" class="hidden">
+        <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Co-teacher email</label>
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
+          <input id="teacher-email-input" type="email" placeholder="teacher@school.edu" class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
+        </div>
+      </div>
+    ` : `
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Primary teacher email</label>
+      <div class="relative">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
+        <input id="teacher-email-input" type="email" placeholder="teacher@school.edu" class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
+      </div>
+    `}
+  `, primary ? 'Add co-teacher' : 'Set primary teacher'));
+  if (primary) {
+    const coBtn = document.getElementById('at-add-co'), coPanel = document.getElementById('at-co-panel');
+    coBtn.addEventListener('click', () => { coPanel.classList.remove('hidden'); coBtn.classList.add('hidden'); document.getElementById('teacher-email-input').focus(); });
+  }
+  wireModalButtons(async () => {
+    const input = document.getElementById('teacher-email-input');
+    const email = input ? input.value.trim() : '';
+    if (!email) { if (input) input.focus(); return; }
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Working…');
+    try {
+      await apiPost({ action: 'addTeacher', courseId: state.courseId, teacherEmail: email });
+      if (!primary) await apiPost({ action: 'setPrimaryTeacher', courseId: state.courseId, teacherEmail: email });
+      showToast(`${email} ${primary ? 'added as a co-teacher' : 'set as primary teacher'}.`, 'success');
+      closeModal();
+      fetchCourseMembers(state.courseId);
+    } catch (err) {
+      showToast(err.message || 'Failed to assign teacher', 'error');
+      resetButtonLoading(btn, primary ? 'Add co-teacher' : 'Set primary teacher');
+    }
+  });
+}
+
+function confirmMakePrimary(email) {
+  openModal(modalShell('Make primary teacher', `
+    <p class="text-sm text-[var(--ink-soft)]">Make <span class="font-medium">${escapeHtml(email)}</span> the primary teacher (owner) of course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span>? Google Classroom requires the new owner to already be a teacher on the course, and some domains restrict ownership transfer entirely — if that's the case here you'll see an error from Google.</p>
+  `, 'Make primary'));
+  wireModalButtons(async () => {
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Updating…');
+    try {
+      await apiPost({ action: 'setPrimaryTeacher', courseId: state.courseId, teacherEmail: email });
+      showToast(`${email} is now the primary teacher.`, 'success');
+      closeModal();
+      fetchCourseMembers(state.courseId);
+    } catch (err) {
+      showToast(err.message || 'Failed to change primary teacher', 'error');
+      resetButtonLoading(btn, 'Make primary');
+    }
+  });
+}
+
+// Add students — "By Student" (autocomplete search over the currently
+// loaded OU roster + any users already fetched) and "By Class Group"
+// (mapped in Settings) using bulkAddStudentsByOU under the hood.
+function openAddStudentModal() {
+  openModal(modalShell('Enroll student(s)', `
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll into course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span>.</p>
+    <div class="flex gap-1 mb-3 p-1 rounded-lg w-fit" style="background:rgba(242,250,245,.7)">
+      <button type="button" id="as-tab-student" class="seg-btn is-active text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By Student</button>
+      <button type="button" id="as-tab-group" class="seg-btn text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By Class Group</button>
+    </div>
+    <div id="as-panel-student">
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Search students</label>
+      <div class="relative">
+        <div class="flex gap-2">
+          <input id="as-student-search" type="text" autocomplete="off" placeholder="Type a name or email…" class="flex-1 min-w-0 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+          <button type="button" id="as-student-search-btn" class="btn-ghost shrink-0 h-full px-3 rounded-lg text-sm font-medium focus-ring flex items-center gap-1.5">
+            <span class="w-3.5 h-3.5" id="icon-as-search"></span> Search
+          </button>
+        </div>
+        <div id="as-student-suggestions" class="hidden mt-1 bg-[var(--panel)] border border-[var(--line)] rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
+        <p id="as-student-no-results" class="hidden text-xs text-[var(--bad)] mt-1.5">No students found with that name or email.</p>
+      </div>
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mt-3 mb-1">Selected students — one per line, or comma-separated</label>
+      <textarea id="student-emails-input" rows="4" placeholder="student1@school.edu&#10;student2@school.edu" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring font-mono"></textarea>
+    </div>
+    <div id="as-panel-group" class="hidden">
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Class Group</label>
+      <select id="as-group-select" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
+        <option value="">Select a class group…</option>
+        ${state.ouMappings.map(m => `<option value="${escapeHtml(m.orgUnitPath)}">${escapeHtml(m.label)}</option>`).join('')}
+      </select>
+      <p class="text-xs text-[var(--ink-faint)] mt-2">${state.ouMappings.length ? 'Every student belonging to this Class Group\u2019s OU will be enrolled.' : 'No Class Groups configured yet — add one under Settings.'}</p>
+    </div>
+  `, 'Enroll', 'btn-tint-good'));
+
+  const tabStudent = document.getElementById('as-tab-student'), tabGroup = document.getElementById('as-tab-group');
+  const panelStudent = document.getElementById('as-panel-student'), panelGroup = document.getElementById('as-panel-group');
+  let mode = 'student';
+  tabStudent.addEventListener('click', () => { mode = 'student'; tabStudent.classList.add('is-active'); tabGroup.classList.remove('is-active'); panelStudent.classList.remove('hidden'); panelGroup.classList.add('hidden'); });
+  tabGroup.addEventListener('click', () => { mode = 'group'; tabGroup.classList.add('is-active'); tabStudent.classList.remove('is-active'); panelGroup.classList.remove('hidden'); panelStudent.classList.add('hidden'); });
+
+  // Searches the full org directory server-side (see searchUsers in
+  // Code.gs) rather than whatever happens to already be in state.users —
+  // that was previously scoped to whichever single OU the Roster tab last
+  // loaded, so anyone outside it just never matched.
+  icon(document.getElementById('icon-as-search'), 'search');
+  const searchInput = document.getElementById('as-student-search');
+  const searchBtn = document.getElementById('as-student-search-btn');
+  const suggestBox = document.getElementById('as-student-suggestions');
+  const noResults = document.getElementById('as-student-no-results');
+  const emailsBox = document.getElementById('student-emails-input');
+  async function runStudentSearch() {
+    const q = searchInput.value.trim();
+    noResults.classList.add('hidden');
+    if (!q) { suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; return; }
+    setButtonLoading(searchBtn, 'Searching…');
+    function resetSearchBtn() {
+      searchBtn.disabled = false;
+      searchBtn.innerHTML = `<span class="w-3.5 h-3.5" id="icon-as-search"></span> Search`;
+      icon(document.getElementById('icon-as-search'), 'search');
+    }
+    let matches = [];
+    try {
+      const data = await apiGet({ action: 'searchUsers', q });
+      matches = data.users || [];
+    } catch (err) {
+      resetSearchBtn();
+      showToast(err.message || 'Search failed', 'error');
+      return;
+    }
+    resetSearchBtn();
+    if (!matches.length) {
+      suggestBox.classList.add('hidden'); suggestBox.innerHTML = '';
+      noResults.classList.remove('hidden');
+      return;
+    }
+    suggestBox.innerHTML = matches.map(u => `<div class="as-suggestion px-3 py-2 text-sm hover:bg-[var(--panel-2)] cursor-pointer" data-email="${escapeHtml(getUserEmail(u))}">${escapeHtml(getUserName(u))} <span class="text-xs text-[var(--ink-faint)] font-mono">${escapeHtml(getUserEmail(u))}</span></div>`).join('');
+    suggestBox.classList.remove('hidden');
+    suggestBox.querySelectorAll('.as-suggestion').forEach(row => row.addEventListener('click', () => {
+      const email = row.dataset.email;
+      const existing = emailsBox.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+      if (!existing.includes(email)) existing.push(email);
+      emailsBox.value = existing.join('\n');
+      searchInput.value = ''; suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; noResults.classList.add('hidden');
+    }));
+  }
+  searchBtn.addEventListener('click', runStudentSearch);
+  searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runStudentSearch(); } });
+
+  wireModalButtons(async () => {
+    const btn = document.getElementById('modal-submit');
+    if (mode === 'student') {
+      const raw = emailsBox.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+      if (!raw.length) { emailsBox.focus(); return; }
+      setButtonLoading(btn, 'Enrolling…');
+      try {
+        const data = await apiPost({ action: 'bulkAddStudents', courseId: state.courseId, studentEmails: raw });
+        const r = data.results;
+        closeModal();
+        if (!r.failed.length) showToast(`Enrolled ${r.ok.length} student(s).`, 'success');
+        else showToast(`Enrolled ${r.ok.length}; ${r.failed.length} failed.`, 'error');
+        fetchCourseMembers(state.courseId);
+      } catch (err) {
+        showToast(err.message || 'Failed to enroll students', 'error');
+        resetButtonLoading(btn, 'Enroll');
+      }
+    } else {
+      const orgUnitPath = document.getElementById('as-group-select').value;
+      if (!orgUnitPath) return;
+      setButtonLoading(btn, 'Enrolling…');
+      try {
+        const data = await apiPost({ action: 'bulkAddStudentsByOU', courseId: state.courseId, orgUnitPath }, 180000);
+        closeModal();
+        showToast(`Enrolled ${data?.results?.ok?.length ?? 'the'} student(s) from this Class Group.`, 'success');
+        fetchCourseMembers(state.courseId);
+      } catch (err) {
+        showToast(err.message || 'Failed to enroll by class group', 'error');
+        resetButtonLoading(btn, 'Enroll');
+      }
+    }
+  });
+}
+
+function confirmRemoveMember(email, role) {
+  const action = role === 'teacher' ? 'removeTeacher' : 'removeStudent';
+  openModal(modalShell('Remove member', `<p class="text-sm text-[var(--ink-soft)]">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span>?</p>`, 'Remove', 'btn-tint-bad'));
+  wireModalButtons(async () => {
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Removing…');
+    try {
+      const payload = { action, courseId: state.courseId, [role === 'teacher' ? 'teacherEmail' : 'studentEmail']: email };
+      await apiPost(payload);
+      showToast(`${email} removed.`, 'success');
+      closeModal();
+      fetchCourseMembers(state.courseId);
+    } catch (err) {
+      showToast(err.message || 'Failed to remove member', 'error');
+      resetButtonLoading(btn, 'Remove');
+    }
+  });
+}
+
+function confirmBulkRemoveStudents() {
+  const emails = Array.from(state.selectedStudentIds);
+  if (!emails.length) return;
+  openModal(modalShell('Remove students', `<p class="text-sm text-[var(--ink-soft)]">Remove ${emails.length} selected student(s) from this course?</p>`, 'Remove all', 'btn-tint-bad'));
+  wireModalButtons(async () => {
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Removing…');
+    try {
+      const data = await apiPost({ action: 'bulkRemoveStudents', courseId: state.courseId, studentEmails: emails });
+      closeModal();
+      showToast(`Removed ${data?.results?.ok?.length ?? emails.length} student(s).`, 'success');
+      fetchCourseMembers(state.courseId);
+    } catch (err) {
+      showToast(err.message || 'Failed to remove students', 'error');
+      resetButtonLoading(btn, 'Remove all');
+    }
+  });
+}
+
+function confirmBulkCourseOp(action, label, verb) {
+  const ids = Array.from(state.selectedCourseIds);
+  if (!ids.length) return;
+  openModal(modalShell(`${verb} classrooms`, `<p class="text-sm text-[var(--ink-soft)]">${verb} ${ids.length} selected classroom(s)?</p>`, label, action === 'bulkDeleteCourses' ? 'btn-tint-bad' : (action === 'bulkArchiveCourses' ? 'btn-tint-warn' : 'btn-primary')));
+  wireModalButtons(async () => {
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Working…');
+    try {
+      const data = await apiPost({ action, courseIds: ids }, 120000);
+      closeModal();
+      const okIds = new Set(data?.results?.ok || ids);
+      showToast(`${verb} succeeded for ${okIds.size} classroom(s).`, 'success');
+      state.selectedCourseIds.clear();
+      // Same fix as the single-course case, but this is the one that
+      // actually hurt: a bulk action on N courses used to trigger a full
+      // live re-fetch + owner-resolution pass over EVERY course in the
+      // domain afterward, on top of the N archive/delete calls themselves.
+      // Patching just the affected courses locally is what actually
+      // removes the wait — the archive/delete calls were never the slow
+      // part.
+      if (action === 'bulkDeleteCourses') {
+        state.courses = state.courses.filter(c => !okIds.has(getCourseId(c)));
+        if (okIds.has(state.courseId)) { state.courseId = ''; showWorkspaceEmpty(); }
+      } else {
+        const newState = action === 'bulkArchiveCourses' ? 'ARCHIVED' : 'ACTIVE';
+        state.courses = state.courses.map(c => okIds.has(getCourseId(c)) ? Object.assign({}, c, { courseState: newState }) : c);
+      }
+      renderCourses();
+      loadOrgStats();
+    } catch (err) {
+      showToast(err.message || `${verb} failed`, 'error');
+      resetButtonLoading(btn, label);
+    }
+  });
+}
+
+function setButtonLoading(btn, label) {
+  btn.disabled = true;
+  btn.innerHTML = `<span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 animate-spin inline-block">${ICONS.spinner}</span>${label}</span>`;
+}
+function resetButtonLoading(btn, label) { btn.disabled = false; btn.innerHTML = label; }
+
+async function exportGrades() {
+  if (!state.courseId) return;
+  const btn = document.getElementById('btn-export-grades');
+  setButtonLoading(btn, 'Exporting…');
+  try {
+    const data = await apiGet({ action: 'exportGrades', courseId: state.courseId }, 120000);
+    downloadText(data.filename, data.csv);
+    showToast('Grades exported.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Failed to export', 'error');
+  } finally {
+    resetButtonLoading(btn, `<span class="w-3.5 h-3.5 inline-block align-[-3px] mr-1">${ICONS.download}</span>Export grades`);
+    icon(document.getElementById('icon-export-grades'), 'download');
+  }
+}
+async function exportTopics() {
+  if (!state.courseId) return;
+  const btn = document.getElementById('btn-export-topics');
+  setButtonLoading(btn, 'Exporting…');
+  try {
+    const data = await apiGet({ action: 'exportTopicsAndAssignments', courseId: state.courseId }, 120000);
+    downloadText(data.filename, data.csv);
+    showToast('Topics & assignments exported.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Failed to export', 'error');
+  } finally {
+    resetButtonLoading(btn, `<span class="w-3.5 h-3.5 inline-block align-[-3px] mr-1">${ICONS.download}</span>Export topics & assignments`);
+    icon(document.getElementById('icon-export-topics'), 'download');
+  }
+}
+
+/* ============================================================
+   VIEW: SETTINGS
+   ============================================================ */
+async function loadSettingsData() {
+  // Independent try/catches instead of one Promise.all: getAppSettings and
+  // getAppUsers are admin-only on the backend, so a permission error there
+  // for a dept_head/auditor account is normal (this runs for every role at
+  // boot, not just when the admin-only Settings view is open) and
+  // shouldn't be reported as a failure. getOuMappings, on the other hand,
+  // is readable by every role — any failure there is real and worth
+  // surfacing, instead of silently resetting to an empty list (which
+  // previously looked identical to "nothing was ever saved").
+  try {
+    const mappingsData = await apiGet({ action: 'getOuMappings' });
+    state.ouMappings = mappingsData.mappings || [];
+  } catch (err) {
+    showToast('Failed to load Class Group renamings: ' + (err.message || 'unknown error'), 'error');
+  }
+  try {
+    const settingsData = await apiGet({ action: 'getAppSettings' });
+    state.appSettings = { staffOU: settingsData.staffOU || '', studentParentOU: settingsData.studentParentOU || '' };
+  } catch (err) { /* expected for non-admin roles */ }
+  try {
+    const usersData = await apiGet({ action: 'getAppUsers' });
+    state.appUsers = usersData.users || [];
+  } catch (err) { /* expected for non-admin roles */ }
+  renderSettingsView();
+  // Staff OU (used to flag non-staff course owners in Manage Classrooms)
+  // lives in appSettings, which loads in parallel with the course list at
+  // boot — re-render the drawer so that badge doesn't just silently wait
+  // for the next unrelated re-render to appear.
+  if (state.courses.length) renderCourses();
+}
+function renderSettingsView() {
+  populateOuDependentSelects();
+  renderMappingsList();
+  renderAppUsersList();
+}
+function renderMappingsList() {
+  const list = document.getElementById('mappings-list');
+  if (!state.ouMappings.length) { list.innerHTML = `<li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No renamed class groups yet.</li>`; return; }
+  list.innerHTML = state.ouMappings.map(m => `
+    <li class="px-3 py-2.5 flex items-center gap-2 text-sm">
+      <span class="font-medium">${escapeHtml(m.label)}</span>
+      <span class="text-xs text-[var(--ink-faint)] font-mono truncate flex-1">${escapeHtml(m.orgUnitPath)}</span>
+      <button class="mapping-edit-btn btn-chip btn-chip-accent shrink-0 focus-ring" data-ou="${escapeHtml(m.orgUnitPath)}" title="Edit">Edit</button>
+      <button class="mapping-delete-btn btn-icon-tint-bad shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition focus-ring" data-ou="${escapeHtml(m.orgUnitPath)}" title="Delete">
+        <span class="w-3.5 h-3.5 block">${ICONS.trash}</span>
+      </button>
+    </li>`).join('');
+  list.querySelectorAll('.mapping-edit-btn').forEach(btn => btn.addEventListener('click', () => {
+    const m = state.ouMappings.find(x => x.orgUnitPath === btn.dataset.ou);
+    if (!m) return;
+    document.getElementById('mapping-ou-select').value = m.orgUnitPath;
+    document.getElementById('mapping-label-input').value = m.label;
+    document.getElementById('mapping-label-input').focus();
+  }));
+  list.querySelectorAll('.mapping-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
+    const orgUnitPath = btn.dataset.ou;
+    const m = state.ouMappings.find(x => x.orgUnitPath === orgUnitPath);
+    openModal(modalShell('Delete renamed class group', `<p class="text-sm text-[var(--ink-soft)]">Delete the renaming "<span class="font-medium">${escapeHtml(m ? m.label : orgUnitPath)}</span>"? The underlying OU is untouched — this only removes the friendly label.</p>`, 'Delete', 'btn-tint-bad'));
+    wireModalButtons(async () => {
+      const modalBtn = document.getElementById('modal-submit');
+      setButtonLoading(modalBtn, 'Deleting…');
+      try {
+        await apiPost({ action: 'deleteOuMapping', orgUnitPath });
+        state.ouMappings = state.ouMappings.filter(x => x.orgUnitPath !== orgUnitPath);
+        renderMappingsList();
+        closeModal();
+        showToast('Renaming deleted.', 'success');
+      } catch (err) {
+        showToast(err.message || 'Failed to delete renaming', 'error');
+        resetButtonLoading(modalBtn, 'Delete');
+      }
+    });
+  }));
+}
+function renderAppUsersList() {
+  const list = document.getElementById('app-users-list');
+  if (!state.appUsers.length) { list.innerHTML = `<li class="px-3 py-6 text-center text-[var(--ink-faint)] text-xs">No app users loaded.</li>`; return; }
+  const roleLabel = { superadmin: 'Super admin', admin: 'Admin', dept_head: 'Department head', auditor: 'Auditor' };
+  list.innerHTML = state.appUsers.map(u => `
+    <li class="px-3 py-2.5 flex items-center gap-2 text-sm">
+      <span class="font-mono text-xs flex-1 truncate">${escapeHtml(u.email)}</span>
+      <span class="text-xs font-medium bg-[var(--accent-tint)] text-[var(--accent-ink)] rounded-full px-2 py-0.5">${escapeHtml(roleLabel[u.role] || u.role)}</span>
+      <button class="app-user-edit-btn btn-chip btn-chip-accent shrink-0 focus-ring" data-email="${escapeHtml(u.email)}" title="Edit">Edit</button>
+    </li>`).join('');
+  list.querySelectorAll('.app-user-edit-btn').forEach(btn => btn.addEventListener('click', () => {
+    const u = state.appUsers.find(x => x.email === btn.dataset.email);
+    if (!u) return;
+    document.getElementById('invite-email-input').value = u.email;
+    document.getElementById('invite-role-select').value = u.role;
+    document.getElementById('invite-editing-note').classList.remove('hidden');
+    document.getElementById('invite-editing-email').textContent = u.email;
+    document.getElementById('btn-invite-user').textContent = 'Update user';
+    state.editingAppUserEmail = u.email;
+  }));
+}
+
+/* ============================================================
+   WIRE UP
+   ============================================================ */
+function boot() {
+  icon(document.getElementById('icon-logo'), 'logo');
+  icon(document.getElementById('icon-logo-login'), 'logo');
+  icon(document.getElementById('rail-icon-summary'), 'gauge');
+  icon(document.getElementById('icon-badge-total'), 'book');
+  icon(document.getElementById('icon-badge-active'), 'checkCircle');
+  icon(document.getElementById('icon-badge-archived'), 'building');
+  icon(document.getElementById('icon-badge-orphaned'), 'warn');
+  icon(document.getElementById('icon-badge-teachers'), 'user');
+  icon(document.getElementById('icon-badge-students'), 'users');
+  icon(document.getElementById('rail-icon-roster'), 'users');
+  icon(document.getElementById('rail-icon-classrooms'), 'book');
+  icon(document.getElementById('rail-icon-settings'), 'gear');
+  icon(document.getElementById('ou-chevron'), 'chevronDown');
+  icon(document.getElementById('icon-refresh-ous'), 'refresh');
+  icon(document.getElementById('icon-search'), 'search');
+  icon(document.getElementById('icon-search-students'), 'search');
+  icon(document.getElementById('icon-enroll-selected'), 'plus');
+  icon(document.getElementById('icon-spinner-users'), 'spinner');
+  icon(document.getElementById('icon-add-teacher'), 'plus');
+  icon(document.getElementById('icon-add-student'), 'plus');
+  icon(document.getElementById('icon-create-course'), 'plus');
+  icon(document.getElementById('icon-bulk-create'), 'upload');
+  icon(document.getElementById('icon-export-grades'), 'download');
+  icon(document.getElementById('icon-export-topics'), 'download');
+  icon(document.getElementById('icon-teachers-header'), 'user');
+  icon(document.getElementById('icon-students-header'), 'users');
+  icon(document.getElementById('icon-spinner-teachers'), 'spinner');
+  icon(document.getElementById('icon-spinner-students'), 'spinner');
+  icon(document.getElementById('icon-search-courses'), 'search');
+  icon(document.getElementById('icon-refresh-courses'), 'refresh');
+  icon(document.getElementById('icon-refresh-course-members'), 'refresh');
+  icon(document.getElementById('course-sort-chevron'), 'chevronDown');
+  icon(document.getElementById('icon-spinner-courses'), 'spinner');
+  icon(document.getElementById('icon-drawer-toggle'), 'chevronLeft');
+
+  setActiveView('summary');
+  document.querySelectorAll('.rail-view-btn').forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
+
+  document.getElementById('btn-sign-out').addEventListener('click', signOut);
+
+  // Roster (Students & Staff)
+  document.getElementById('ou-select').addEventListener('change', (e) => {
+    state.selectedOU = e.target.value;
+    if (state.selectedOU) fetchUsersByOU(state.selectedOU);
+    else { state.users = []; state.filteredUsers = []; renderUserTable(); document.getElementById('user-search').disabled = true; }
+  });
+  document.getElementById('btn-refresh-ous').addEventListener('click', async () => {
+    await fetchOUs(true);
+    if (state.selectedOU) await fetchUsersByOU(state.selectedOU, true);
+    loadOrgStats(true);
+  });
+  document.getElementById('user-search').addEventListener('input', (e) => { state.searchQuery = e.target.value; applyUserFilter(); });
+  document.getElementById('select-all').addEventListener('change', (e) => {
+    const emails = state.filteredUsers.map(getUserEmail);
+    if (e.target.checked) emails.forEach(em => state.selectedUserIds.add(em)); else emails.forEach(em => state.selectedUserIds.delete(em));
+    renderUserTable(); updateSelectionBar();
+  });
+  document.getElementById('btn-clear-selection').addEventListener('click', () => { state.selectedUserIds.clear(); renderUserTable(); updateSelectionBar(); });
+  document.getElementById('btn-enroll-selected').addEventListener('click', () => {
+    openModal(modalShell('Enroll selected students', `
+      <p class="text-sm text-[var(--ink-soft)] mb-3">${state.selectedUserIds.size} student(s) selected. Search for the destination classroom by name or primary teacher.</p>
+      <div class="relative">
+        <input id="bulk-course-search" type="text" autocomplete="off" placeholder="Class name, section, or teacher email…" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+        <div id="bulk-course-suggestions" class="hidden absolute left-0 right-0 z-10 mt-1 bg-[var(--panel)] border border-[var(--line)] rounded-lg shadow-lg max-h-56 overflow-y-auto"></div>
+      </div>
+      <div id="bulk-course-selected" class="hidden mt-3 flex items-center justify-between gap-2 bg-[var(--accent-tint)] border border-[#bfe6cf] rounded-lg px-3 py-2">
+        <div class="min-w-0">
+          <p class="text-sm font-medium truncate" id="bulk-course-selected-name">—</p>
+          <p class="text-xs text-[var(--ink-faint)] truncate" id="bulk-course-selected-meta">—</p>
+        </div>
+        <button type="button" id="bulk-course-clear" class="text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring shrink-0">Change</button>
+      </div>
+    `, 'Enroll all', 'btn-tint-good'));
+
+    let selectedCourseId = '';
+    const searchInput = document.getElementById('bulk-course-search');
+    const suggestBox = document.getElementById('bulk-course-suggestions');
+    const selectedBox = document.getElementById('bulk-course-selected');
+    const selectedNameEl = document.getElementById('bulk-course-selected-name');
+    const selectedMetaEl = document.getElementById('bulk-course-selected-meta');
+
+    function renderCourseSuggestions() {
+      const q = searchInput.value.trim().toLowerCase();
+      if (!q) { suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; return; }
+      const matches = state.courses.filter(c =>
+        getCourseName(c).toLowerCase().includes(q) ||
+        getCourseSection(c).toLowerCase().includes(q) ||
+        (c.ownerEmail || '').toLowerCase().includes(q)
+      ).slice(0, 20);
+      if (!matches.length) {
+        suggestBox.innerHTML = `<div class="px-3 py-2 text-sm text-[var(--ink-faint)]">No classrooms match that name or teacher.</div>`;
+        suggestBox.classList.remove('hidden');
+        return;
+      }
+      suggestBox.innerHTML = matches.map(c => `
+        <div class="bulk-course-suggestion px-3 py-2 text-sm hover:bg-[var(--panel-2)] cursor-pointer" data-id="${escapeHtml(getCourseId(c))}">
+          <p class="font-medium truncate">${escapeHtml(getCourseName(c))}</p>
+          <p class="text-xs text-[var(--ink-faint)] truncate">${escapeHtml(getCourseSection(c) || getCourseId(c))}${c.ownerEmail ? ' · ' + escapeHtml(c.ownerEmail) : ''}</p>
+        </div>`).join('');
+      suggestBox.classList.remove('hidden');
+      suggestBox.querySelectorAll('.bulk-course-suggestion').forEach(row => row.addEventListener('click', () => {
+        const c = state.courses.find(x => getCourseId(x) === row.dataset.id);
+        if (!c) return;
+        selectedCourseId = getCourseId(c);
+        selectedNameEl.textContent = getCourseName(c);
+        selectedMetaEl.textContent = `${getCourseSection(c) || getCourseId(c)}${c.ownerEmail ? ' · ' + c.ownerEmail : ''}`;
+        selectedBox.classList.remove('hidden');
+        searchInput.value = '';
+        suggestBox.classList.add('hidden'); suggestBox.innerHTML = '';
+      }));
+    }
+    searchInput.addEventListener('input', renderCourseSuggestions);
+    document.getElementById('bulk-course-clear').addEventListener('click', () => {
+      selectedCourseId = '';
+      selectedBox.classList.add('hidden');
+      searchInput.value = '';
+      searchInput.focus();
+    });
+
+    wireModalButtons(async () => {
+      if (!selectedCourseId) { showToast('Search for and select a classroom first.', 'error'); return; }
+      const btn = document.getElementById('modal-submit');
+      setButtonLoading(btn, 'Enrolling…');
+      try {
+        const data = await apiPost({ action: 'bulkAddStudents', courseId: selectedCourseId, studentEmails: Array.from(state.selectedUserIds) });
+        const r = data.results;
+        closeModal();
+        if (!r.failed.length) showToast(`Enrolled ${r.ok.length} student(s) in ${selectedNameEl.textContent}.`, 'success');
+        else showToast(`Enrolled ${r.ok.length}; ${r.failed.length} failed.`, 'error');
+      } catch (err) {
+        showToast(err.message || 'Failed to enroll students', 'error');
+        resetButtonLoading(btn, 'Enroll all');
+      }
     });
   });
-  return { csv: toCsv(rows), filename: 'grades_' + courseId + '.csv' };
-}
 
-function exportTopicsAndAssignmentsCsv(courseId) {
-  if (!courseId) throw new Error('courseId is required');
-  const topics = listAllPages(function (pageToken) {
-    return Classroom.Courses.Topics.list(courseId, { pageToken: pageToken, pageSize: 100 });
-  }, 'topic');
-  const topicNameById = {};
-  topics.forEach(function (t) { topicNameById[t.topicId] = t.name; });
-
-  const courseWork = listAllPages(function (pageToken) {
-    return Classroom.Courses.CourseWork.list(courseId, { pageToken: pageToken, pageSize: 100 });
-  }, 'courseWork');
-
-  const rows = [['Title', 'Topic', 'Type', 'State', 'Max Points', 'Due Date', 'Created']];
-  courseWork.forEach(function (cw) {
-    const due = cw.dueDate ? (cw.dueDate.year + '-' + pad2(cw.dueDate.month) + '-' + pad2(cw.dueDate.day)) : '';
-    rows.push([
-      cw.title || '',
-      topicNameById[cw.topicId] || '',
-      cw.workType || '',
-      cw.state || '',
-      cw.maxPoints != null ? cw.maxPoints : '',
-      due,
-      cw.creationTime || '',
-    ]);
+  // Manage Classrooms
+  document.getElementById('btn-open-create-course').addEventListener('click', openCreateCourseModal);
+  document.getElementById('btn-open-add-teacher').addEventListener('click', openAddTeacherModal);
+  document.getElementById('btn-open-add-student').addEventListener('click', openAddStudentModal);
+  document.getElementById('btn-bulk-create').addEventListener('click', openBulkCreateModal);
+  document.getElementById('btn-export-grades').addEventListener('click', exportGrades);
+  document.getElementById('btn-export-topics').addEventListener('click', exportTopics);
+  document.getElementById('course-search').addEventListener('input', (e) => { state.courseSearchQuery = e.target.value; applyCourseFilter(); });
+  document.getElementById('course-sort').value = state.courseSort;
+  document.getElementById('course-sort').addEventListener('change', (e) => { state.courseSort = e.target.value; applyCourseFilter(); });
+  document.getElementById('btn-refresh-drawer').addEventListener('click', () => fetchCourses(true));
+  document.getElementById('btn-refresh-course-members').addEventListener('click', () => { if (state.courseId) fetchCourseMembers(state.courseId, true); });
+  document.getElementById('btn-bulk-archive').addEventListener('click', () => confirmBulkCourseOp('bulkArchiveCourses', 'Archive', 'Archive'));
+  document.getElementById('btn-bulk-unarchive').addEventListener('click', () => confirmBulkCourseOp('bulkUnarchiveCourses', 'Unarchive', 'Unarchive'));
+  document.getElementById('btn-bulk-delete').addEventListener('click', () => confirmBulkCourseOp('bulkDeleteCourses', 'Delete', 'Permanently delete'));
+  document.getElementById('btn-course-clear-selection').addEventListener('click', () => { state.selectedCourseIds.clear(); renderCourses(); });
+  document.getElementById('btn-select-all-students').addEventListener('click', () => {
+    const allSelected = state.students.length > 0 && state.students.every(s => state.selectedStudentIds.has(getMemberEmail(s)));
+    if (allSelected) state.selectedStudentIds.clear();
+    else state.students.forEach(s => state.selectedStudentIds.add(getMemberEmail(s)));
+    renderMembers();
   });
-  return { csv: toCsv(rows), filename: 'topics_assignments_' + courseId + '.csv' };
+  document.getElementById('btn-bulk-remove-students').addEventListener('click', confirmBulkRemoveStudents);
+  document.getElementById('student-search').addEventListener('input', (e) => { state.studentSearchQuery = e.target.value; renderMembers(); });
+  document.getElementById('student-sort').addEventListener('change', (e) => { state.studentSort = e.target.value; renderMembers(); });
+  document.getElementById('drawer-toggle').addEventListener('click', () => {
+    state.drawerCollapsed = !state.drawerCollapsed;
+    document.getElementById('classroom-drawer').classList.toggle('collapsed', state.drawerCollapsed);
+    document.getElementById('classrooms-shell').classList.toggle('drawer-collapsed', state.drawerCollapsed);
+    icon(document.getElementById('icon-drawer-toggle'), state.drawerCollapsed ? 'chevronRight' : 'chevronLeft');
+  });
+  showWorkspaceEmpty();
+
+  // Settings
+  document.getElementById('btn-add-mapping').addEventListener('click', async () => {
+    const orgUnitPath = document.getElementById('mapping-ou-select').value;
+    const label = document.getElementById('mapping-label-input').value.trim();
+    if (!orgUnitPath || !label) { showToast('Choose an OU and enter a label.', 'error'); return; }
+    try {
+      await apiPost({ action: 'saveOuMapping', orgUnitPath, label });
+      const existing = state.ouMappings.findIndex(m => m.orgUnitPath === orgUnitPath);
+      if (existing >= 0) state.ouMappings[existing].label = label; else state.ouMappings.push({ orgUnitPath, label });
+      renderMappingsList();
+      document.getElementById('mapping-label-input').value = '';
+      showToast('Class Group mapping saved.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to save mapping', 'error');
+    }
+  });
+  document.getElementById('btn-save-scope').addEventListener('click', async () => {
+    const staffOU = document.getElementById('setting-staff-ou').value;
+    const studentParentOU = document.getElementById('setting-student-ou').value;
+    try {
+      await apiPost({ action: 'saveAppSettings', staffOU, studentParentOU });
+      state.appSettings = { staffOU, studentParentOU };
+      showToast('Scope saved.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to save scope', 'error');
+    }
+  });
+  function resetAppUserForm() {
+    state.editingAppUserEmail = '';
+    document.getElementById('invite-email-input').value = '';
+    document.getElementById('invite-role-select').value = 'superadmin';
+    document.getElementById('invite-editing-note').classList.add('hidden');
+    document.getElementById('btn-invite-user').textContent = 'Add user';
+  }
+  document.getElementById('btn-cancel-edit-user').addEventListener('click', resetAppUserForm);
+  document.getElementById('btn-invite-user').addEventListener('click', async () => {
+    const email = document.getElementById('invite-email-input').value.trim();
+    const role = document.getElementById('invite-role-select').value;
+    if (!email) { showToast('Enter an email address.', 'error'); return; }
+    const isEdit = state.editingAppUserEmail === email;
+    try {
+      await apiPost({ action: 'addAppUser', email, role });
+      const existing = state.appUsers.findIndex(u => u.email === email);
+      if (existing >= 0) state.appUsers[existing].role = role; else state.appUsers.push({ email, role });
+      renderAppUsersList();
+      resetAppUserForm();
+      showToast(isEdit ? `${email} updated to ${role}.` : `${email} added as ${role}.`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to save user', 'error');
+    }
+  });
+
+  fetchOUs();
+  fetchCourses().then(loadOrgStats);
+  loadSettingsData();
 }
 
-function pad2(n) { return ('0' + n).slice(-2); }
-
-function toCsv(rows) {
-  return rows.map(function (row) {
-    return row.map(function (cell) {
-      const s = String(cell == null ? '' : cell);
-      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    }).join(',');
-  }).join('\n');
-}
+window.addEventListener('load', initSignIn);
+</script>
+</body>
+</html>
