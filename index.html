@@ -645,11 +645,13 @@ async function fetchCourses(forceRefresh) {
     const data = await apiGet(params, 100000);
     const courses = data.courses || (Array.isArray(data) ? data : []) || [];
     state.courses = courses;
+    state.loadingCourses = false;
     applyCourseFilter();
     renderCourseStats(data);
   } catch (err) {
     state.courses = [];
     state.filteredCourses = [];
+    state.loadingCourses = false;
     renderCourses();
     renderCourseStats(null);
     showToast(err.message || 'Failed to load classrooms', 'error');
