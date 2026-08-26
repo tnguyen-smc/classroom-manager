@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Classroom Admin — OU &amp; Course Manager</title>
+<title>Google Classroom Manager | St. Mary Catholic School</title>
 
 <script src="https://cdn.jsdelivr.net/npm/@unocss/runtime/uno.global.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -17,49 +17,104 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
 
 <style>
+  /* Dark, panel-based theme in the style requested — green accent + Google
+     Sans/Roboto kept from the previous version, everything else adapted:
+     flat panels instead of shadowed cards, hairline dividers, pill buttons,
+     faint badge chips, condensed density. */
   :root{
-    --ink:#14201a;
-    --ink-soft:#4b5a52;
-    --ink-faint:#87958d;
-    --line:#dfe8e2;
-    --paper:#f3f8f5;
-    --card:#ffffff;
+    --bg:#0f1310;
+    --panel:#161c18;
+    --panel-2:#1c231e;
+    --line:#28322b;
+    --ink:#e8ede9;
+    --ink-soft:#a9b5ac;
+    --ink-faint:#788178;
     --accent:#2ca15f;
-    --accent-ink:#1f7b48;
-    --accent-tint:#e4f5ea;
+    --accent-ink:#3ecb7c;
+    --accent-tint:rgba(44,161,95,.14);
     --good:#2ca15f;
-    --good-tint:#e4f5ea;
-    --bad:#d7362f;
-    --bad-tint:#fdeceb;
-    --warn:#b5670a;
-    --warn-tint:#fdf1e0;
+    --good-tint:rgba(44,161,95,.14);
+    --bad:#d0584f;
+    --bad-tint:rgba(208,88,79,.14);
+    --warn:#d98b4a;
+    --warn-tint:rgba(217,139,74,.14);
+    /* legacy aliases so unchanged markup below keeps working */
+    --paper:var(--bg);
+    --card:var(--panel);
   }
+  *{ box-sizing:border-box; }
+  *{ scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.18) transparent; }
   html,body{ font-family:'Google Sans','Google Sans Text',Roboto,system-ui,Arial,sans-serif; color:var(--ink); }
   .font-mono{ font-family:'Roboto Mono', ui-monospace, monospace; }
-  ::-webkit-scrollbar{ width:8px; height:8px; }
-  ::-webkit-scrollbar-thumb{ background:#c3d2ca; border-radius:8px; }
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.16); border-radius:10px; border:3px solid transparent; background-clip:content-box; }
+  ::-webkit-scrollbar-thumb:hover{ background:rgba(255,255,255,.3); background-clip:content-box; }
   .fade-in{ animation:fadeIn .16s ease-out; }
   @keyframes fadeIn{ from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);} }
   .toast-in{ animation:toastIn .22s cubic-bezier(.34,1.56,.64,1); }
   @keyframes toastIn{ from{opacity:0; transform:translateX(24px);} to{opacity:1; transform:translateX(0);} }
   .hidden.flex,.hidden.grid{ display:none !important; }
   [v-cloak]{ display:none; }
-  .surface{ background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 1px 2px rgba(20,32,26,.04), 0 8px 24px -18px rgba(20,32,26,.18); }
+  .surface{ background:var(--panel); border:1px solid var(--line); border-radius:10px; }
   .nav-link{ color:var(--ink-soft); }
-  .nav-link:hover{ background:var(--paper); color:var(--ink); }
+  .nav-link:hover{ background:var(--panel-2); color:var(--ink); }
   .nav-link.is-active{ background:var(--accent-tint); color:var(--accent-ink); }
-  .pill-btn{ color:var(--ink-soft); background:var(--paper); border:1px solid transparent; }
-  .pill-btn.is-active{ background:var(--ink); color:#fff; }
+  .pill-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
+  .pill-btn.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); }
   .focus-ring:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
-  .btn-primary{ background:var(--accent); color:#fff; }
-  .btn-primary:hover{ background:var(--accent-ink); }
-  .stat-card{ background:var(--card); border:1px solid var(--line); border-radius:16px; }
+  .btn-primary{ background:var(--accent); color:#08150e; font-weight:600; }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .stat-card{ background:var(--panel); border:1px solid var(--line); border-radius:10px; }
   .role-hide{ display:none !important; }
-  .seg-btn{ color:var(--ink-soft); background:var(--paper); }
-  .seg-btn.is-active{ background:var(--accent); color:#fff; }
+  .seg-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
+  .seg-btn.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); font-weight:600; }
+
+  /* form controls */
+  select, input, textarea{ background:var(--bg) !important; color:var(--ink) !important; }
+  select option{ background:var(--panel); color:var(--ink); }
+  input::placeholder, textarea::placeholder{ color:var(--ink-faint); }
+  .border-\[var\(--line\)\]{ border-color:var(--line) !important; }
+
+  /* pill-style buttons (bordered, transparent, hover brightens) replacing the
+     old flat bordered look for secondary actions */
+  #btn-refresh-ous, #btn-refresh-courses{ background:var(--panel-2); }
+  #btn-open-enroll-ou, #btn-open-add-teacher, #btn-open-create-course,
+  #btn-export-grades, #btn-export-topics{
+    background:transparent; border:1px solid var(--line); color:var(--ink-soft);
+    border-radius:999px;
+  }
+  #btn-open-enroll-ou:hover, #btn-open-add-teacher:hover, #btn-open-create-course:hover,
+  #btn-export-grades:hover, #btn-export-topics:hover{ color:var(--ink); border-color:var(--ink-soft); background:transparent; }
+  #btn-open-add-student{ border-radius:999px; }
+  #btn-load-course{ border-radius:999px; }
+
+  /* rows / dividers */
+  .divide-y > *{ border-color:var(--line) !important; }
+  .border-b{ border-color:var(--line) !important; }
+  tr.hover\:bg-\[var\(--paper\)\]:hover, li:hover{ background:var(--panel-2) !important; }
+  .course-row:hover, tr:hover{ background:var(--panel-2); }
+
+  /* badges / chips */
+  .rounded-full{ }
+  code, .font-mono{ letter-spacing:.01em; }
+
+  /* modal */
+  #modal-content{ background:var(--panel) !important; border:1px solid var(--line); }
+  #modal-backdrop{ background:rgba(6,10,7,.66) !important; }
+
+  /* toasts */
+  #toast-container .toast-in{ background:var(--panel) !important; color:var(--ink); }
+
+  /* sidebar */
+  aside{ background:var(--panel) !important; border-color:var(--line) !important; }
+  header.md\:hidden{ background:rgba(22,28,24,.95) !important; }
+
+  /* login screen */
+  #login-screen{ background:var(--bg) !important; }
 </style>
 </head>
-<body class="bg-[var(--paper)] text-[var(--ink)] min-h-screen">
+<body class="bg-[var(--bg)] text-[var(--ink)] min-h-screen">
 
   <!-- Sign-in gate -->
   <div id="login-screen" class="fixed inset-0 z-[100] bg-[var(--paper)] flex items-center justify-center p-6">
@@ -67,7 +122,8 @@
       <div class="w-12 h-12 rounded-2xl bg-[var(--accent)] flex items-center justify-center text-white mx-auto mb-4">
         <span class="w-6 h-6" id="icon-logo-login"></span>
       </div>
-      <h1 class="text-xl font-bold tracking-tight mb-1">Classroom Admin</h1>
+      <h1 class="text-xl font-bold tracking-tight mb-1">Google Classroom Manager</h1>
+      <p class="text-xs font-semibold text-[var(--accent-ink)] tracking-wide mb-4">St. Mary Catholic School</p>
       <p class="text-sm text-[var(--ink-soft)] mb-6">Sign in with your Workspace account to continue.</p>
       <div id="gis-button-container" class="flex justify-center"></div>
       <p id="login-error" class="hidden text-sm text-[var(--bad)] mt-4"></p>
@@ -79,18 +135,18 @@
 
   <!-- Modal -->
   <div id="modal-backdrop" class="hidden fixed inset-0 bg-[#14201a]/45 z-70 flex items-center justify-center p-4">
-    <div id="modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in max-h-[85vh] overflow-y-auto"></div>
+    <div id="modal-content" class="bg-[var(--panel)] rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in max-h-[85vh] overflow-y-auto"></div>
   </div>
 
   <div id="app-shell" class="hidden flex min-h-screen">
-    <aside class="hidden md:flex md:flex-col w-60 bg-white border-r border-[var(--line)] shrink-0">
+    <aside class="hidden md:flex md:flex-col w-60 bg-[var(--panel)] border-r border-[var(--line)] shrink-0">
       <div class="h-16 flex items-center gap-3 px-5 border-b border-[var(--line)]">
         <div class="w-9 h-9 rounded-xl bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
           <span class="w-4.5 h-4.5" id="icon-logo"></span>
         </div>
         <div class="min-w-0">
-          <p class="text-sm font-bold leading-tight truncate tracking-tight">Classroom Admin</p>
-          <p class="text-xs text-[var(--ink-faint)] leading-tight truncate">Workspace console</p>
+          <p class="text-sm font-bold leading-tight truncate tracking-tight">Google Classroom Manager</p>
+          <p class="text-xs text-[var(--ink-faint)] leading-tight truncate">St. Mary Catholic School</p>
         </div>
       </div>
       <nav class="flex-1 px-3 py-4 space-y-1">
@@ -109,12 +165,12 @@
     </aside>
 
     <div class="flex-1 min-w-0 flex flex-col">
-      <header class="md:hidden bg-white/95 backdrop-blur border-b border-[var(--line)] sticky top-0 z-30">
+      <header class="md:hidden bg-[var(--panel)]/95 backdrop-blur border-b border-[var(--line)] sticky top-0 z-30">
         <div class="px-4 py-3 flex items-center gap-3">
           <div class="w-8 h-8 rounded-lg bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
             <span class="w-4 h-4" id="icon-logo-mobile"></span>
           </div>
-          <h1 class="text-base font-bold flex-1 truncate tracking-tight">Classroom Admin</h1>
+          <h1 class="text-base font-bold flex-1 truncate tracking-tight">Google Classroom Manager</h1>
           <button id="btn-sign-out-mobile" class="text-xs font-medium text-[var(--accent-ink)] focus-ring">Sign out</button>
         </div>
         <div class="px-4 pb-3 flex gap-2">
@@ -133,7 +189,7 @@
             <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Organizational Unit</label>
             <div class="grid grid-cols-[1fr_auto] gap-2">
               <div class="relative min-w-0">
-                <select id="ou-select" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm bg-white focus-ring transition-shadow">
+                <select id="ou-select" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm bg-[var(--bg)] focus-ring transition-shadow">
                   <option value="">Loading organizational units…</option>
                 </select>
                 <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="ou-chevron"></div>
@@ -164,7 +220,7 @@
 
       <div class="surface overflow-hidden">
         <div class="relative">
-          <div id="ou-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+          <div id="ou-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
             <div class="flex items-center gap-2 text-[var(--ink-soft)] text-sm">
               <span class="w-5 h-5 animate-spin" id="icon-spinner-users"></span> Loading roster…
             </div>
@@ -246,43 +302,54 @@
         </div>
       </div>
 
-      <!-- All classrooms browser -->
+      <!-- View switcher — separate slick views instead of one long filtered list -->
+      <div id="course-view-tabs" class="flex flex-wrap gap-1.5 mb-3"></div>
+
       <div class="surface overflow-hidden mb-4">
         <div class="relative">
-          <div id="courses-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+          <div id="courses-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
             <div class="flex items-center gap-2 text-[var(--ink-soft)] text-sm">
               <span class="w-5 h-5 animate-spin" id="icon-spinner-courses"></span> Loading classrooms…
             </div>
           </div>
-          <div class="px-4 py-3 border-b border-[var(--paper)] space-y-3">
+          <div class="px-4 py-3 border-b border-[var(--line)] space-y-3">
             <div class="flex items-center gap-2 flex-wrap">
               <span class="w-4 h-4 text-[var(--ink-soft)] shrink-0" id="icon-courses-header"></span>
-              <h2 class="font-semibold shrink-0">All classrooms</h2>
-              <span id="courses-count" class="text-xs font-medium bg-[var(--paper)] text-[var(--ink-soft)] rounded-full px-2 py-0.5 shrink-0">0</span>
-              <label class="ml-auto flex items-center gap-1.5 text-xs font-medium text-[var(--ink-soft)] cursor-pointer select-none">
-                <input type="checkbox" id="filter-orphaned" class="rounded border-[var(--line)]">
-                Only owner-deactivated
-              </label>
+              <h2 id="course-view-title" class="font-semibold shrink-0">Active classrooms</h2>
+              <span id="courses-count" class="text-xs font-medium bg-[var(--panel-2)] text-[var(--ink-soft)] rounded-full px-2 py-0.5 shrink-0">0</span>
+              <button id="btn-refresh-courses" title="Refresh classrooms" class="ml-auto h-8 w-8 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:text-[var(--ink)] hover:border-[var(--ink-soft)] active:scale-95 transition-all shrink-0 focus-ring">
+                <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
+              </button>
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-2">
               <div class="relative min-w-0">
                 <span class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="icon-search-courses"></span>
-                <input id="course-search" type="text" placeholder="Search by class name…"
+                <input id="course-search" type="text" placeholder="Search by class name or teacher…"
                   class="w-full border border-[var(--line)] rounded-lg pl-8 pr-3 py-1.5 text-sm focus-ring transition-shadow">
               </div>
-              <button id="btn-refresh-courses" title="Refresh classrooms" class="h-8 w-8 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-95 transition-all shrink-0 focus-ring">
-                <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
-              </button>
+              <div class="relative min-w-0">
+                <select id="course-sort" class="h-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-8 py-1.5 text-sm bg-[var(--bg)] focus-ring">
+                  <option value="updateTime_desc">Last active · newest</option>
+                  <option value="updateTime_asc">Last active · oldest</option>
+                  <option value="creationTime_desc">Created · newest</option>
+                  <option value="creationTime_asc">Created · oldest</option>
+                  <option value="name_asc">Name · A–Z</option>
+                  <option value="name_desc">Name · Z–A</option>
+                  <option value="owner_asc">Primary teacher · A–Z</option>
+                </select>
+                <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="course-sort-chevron"></div>
+              </div>
             </div>
-            <div id="course-bulk-bar" class="hidden flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[#bfe6cf] rounded-lg px-3 py-2">
+            <div id="course-bulk-bar" class="hidden flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[var(--line)] rounded-lg px-3 py-2">
               <span class="text-sm text-[var(--accent-ink)] font-medium"><span id="course-selected-count">0</span> classroom(s) selected</span>
-              <button id="btn-bulk-archive" class="role-write ml-auto text-sm font-medium text-[var(--warn)] hover:opacity-70 px-2 py-1 focus-ring">Archive</button>
+              <button id="btn-bulk-archive" class="role-write bulk-archive-btn ml-auto text-sm font-medium text-[var(--warn)] hover:opacity-70 px-2 py-1 focus-ring">Archive</button>
+              <button id="btn-bulk-unarchive" class="role-write bulk-unarchive-btn text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1 focus-ring">Unarchive</button>
               <button id="btn-bulk-delete" class="role-write text-sm font-medium text-[var(--bad)] hover:opacity-70 px-2 py-1 focus-ring">Delete</button>
               <button id="btn-course-clear-selection" class="text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1 focus-ring">Clear</button>
             </div>
-            <p class="text-xs text-[var(--ink-faint)] leading-snug">Classrooms are listed domain-wide, including courses owned by teachers whose accounts are suspended or deleted.</p>
+            <p id="course-view-hint" class="text-xs text-[var(--ink-faint)] leading-snug"></p>
           </div>
-          <ul id="courses-list" class="divide-y divide-[var(--paper)] max-h-96 overflow-y-auto">
+          <ul id="courses-list" class="divide-y divide-[var(--line)] max-h-[32rem] overflow-y-auto">
             <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Loading classrooms…</li>
           </ul>
         </div>
@@ -291,7 +358,7 @@
       <div class="grid md:grid-cols-2 gap-4">
         <div class="surface border-l-[3px] border-l-[var(--accent)] overflow-hidden">
           <div class="relative">
-            <div id="teachers-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+            <div id="teachers-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
               <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-teachers"></span>
             </div>
             <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2">
@@ -307,7 +374,7 @@
 
         <div class="surface border-l-[3px] border-l-[var(--good)] overflow-hidden">
           <div class="relative">
-            <div id="students-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+            <div id="students-loading" class="hidden absolute inset-0 bg-[var(--panel)]/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
               <span class="w-5 h-5 animate-spin text-[var(--ink-soft)]" id="icon-spinner-students"></span>
             </div>
             <div class="px-4 py-3 border-b border-[var(--paper)] flex items-center gap-2">
@@ -329,6 +396,10 @@
     </section>
 
       </main>
+      <footer class="border-t border-[var(--line)] px-4 sm:px-6 lg:px-8 py-5 text-center">
+        <p class="text-xs text-[var(--ink-faint)] tracking-wide">Google Classroom Manager · Lunch Counter App</p>
+        <p class="text-xs text-[var(--ink-faint)] mt-0.5">Made only for St. Mary Catholic School.</p>
+      </footer>
     </div>
   </div>
 
@@ -336,7 +407,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbzEpK-NtvBCnmS_Ih884LGJGNYK_MX_m0dCiPUj4Sel6_u-gl55j0y8396ITym66peQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxHzaoUrkbCjYjjjR7YRHEHtbdr9AYy6z5FpTtb7Yptu6hU_TMVS-aXkcMtjpmzc-jc/exec";
 const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
@@ -388,7 +459,8 @@ const state = {
   courses: [],
   filteredCourses: [],
   courseSearchQuery: '',
-  onlyOrphaned: false,
+  courseView: 'active', // active | archived | provisioned | declined | orphaned | all
+  courseSort: 'updateTime_desc',
   loadingCourses: false,
   selectedCourseIds: new Set(),
   teachers: [],
@@ -444,7 +516,7 @@ function showToast(message, type = 'success') {
   const container = document.getElementById('toast-container');
   const el = document.createElement('div');
   const isSuccess = type === 'success';
-  el.className = `toast-in flex items-start gap-3 rounded-xl shadow-lg border px-4 py-3 text-sm ${isSuccess ? 'bg-white border-[#bfe6cf]' : 'bg-white border-[#f6c9c5]'}`;
+  el.className = `toast-in flex items-start gap-3 rounded-xl shadow-lg border px-4 py-3 text-sm bg-[var(--panel)] ${isSuccess ? 'border-[#255c3b]' : 'border-[#5c3230]'}`;
   el.innerHTML = `
     <span class="w-5 h-5 shrink-0 mt-0.5 ${isSuccess ? 'text-[var(--good)]' : 'text-[var(--bad)]'}">${ICONS[isSuccess ? 'checkCircle' : 'alertCircle']}</span>
     <span class="flex-1 text-[var(--ink)] leading-snug">${escapeHtml(message)}</span>
@@ -699,44 +771,107 @@ function renderCourseStats() {
   document.getElementById('stat-active-courses').textContent = active || '0';
   document.getElementById('stat-orphaned-courses').textContent = orphaned || '0';
   document.getElementById('stat-teacher-count').textContent = teacherSet.size || '0';
+  renderCourseViewTabs();
+}
+
+// Each "view" is its own slick tab instead of one long filtered scroll —
+// tabs map to real Classroom courseStates plus one virtual view
+// (orphaned = owner suspended/deleted) and an "All" catch-all.
+const COURSE_VIEWS = [
+  { id: 'active', label: 'Active', test: c => (c.courseState || '').toUpperCase() === 'ACTIVE',
+    hint: 'Classrooms currently in normal use.' },
+  { id: 'archived', label: 'Archived', test: c => (c.courseState || '').toUpperCase() === 'ARCHIVED',
+    hint: 'Read-only in Classroom. Unarchive to reactivate, or delete permanently.' },
+  { id: 'provisioned', label: 'Provisioned', test: c => (c.courseState || '').toUpperCase() === 'PROVISIONED',
+    hint: 'Created but awaiting the owning teacher to accept the invite in Classroom.' },
+  { id: 'declined', label: 'Declined', test: c => (c.courseState || '').toUpperCase() === 'DECLINED',
+    hint: 'The invited owner declined — these are effectively unused.' },
+  { id: 'orphaned', label: 'Owner inactive', test: isOwnerInactive,
+    hint: 'Owning teacher\u2019s account is suspended or deleted, across any state.' },
+  { id: 'all', label: 'All', test: () => true, hint: 'Every classroom in the domain, any state.' },
+];
+function currentView() { return COURSE_VIEWS.find(v => v.id === state.courseView) || COURSE_VIEWS[0]; }
+
+function renderCourseViewTabs() {
+  const wrap = document.getElementById('course-view-tabs');
+  wrap.innerHTML = COURSE_VIEWS.map(v => {
+    const count = state.courses.filter(v.test).length;
+    const active = v.id === state.courseView;
+    return `<button type="button" class="course-view-tab seg-btn ${active ? 'is-active' : ''} text-xs font-medium rounded-full px-3.5 py-1.5 focus-ring" data-view="${v.id}">${v.label} <span class="opacity-70">${count}</span></button>`;
+  }).join('');
+  document.querySelectorAll('.course-view-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.courseView = btn.dataset.view;
+      state.selectedCourseIds.clear();
+      applyCourseFilter();
+    });
+  });
+}
+
+function sortCourses(list) {
+  const [field, dir] = state.courseSort.split('_');
+  const mul = dir === 'asc' ? 1 : -1;
+  return list.slice().sort((a, b) => {
+    let av, bv;
+    if (field === 'name') { av = getCourseName(a).toLowerCase(); bv = getCourseName(b).toLowerCase(); }
+    else if (field === 'owner') { av = getOwnerEmail(a).toLowerCase(); bv = getOwnerEmail(b).toLowerCase(); }
+    else { av = a[field] || ''; bv = b[field] || ''; } // creationTime / updateTime, ISO strings sort fine
+    if (av < bv) return -1 * mul;
+    if (av > bv) return 1 * mul;
+    return 0;
+  });
 }
 
 function applyCourseFilter() {
+  const view = currentView();
+  document.getElementById('course-view-title').textContent = view.label + ' classrooms';
+  document.getElementById('course-view-hint').textContent = view.hint;
   const q = state.courseSearchQuery.trim().toLowerCase();
-  let list = state.courses.slice();
+  let list = state.courses.filter(view.test);
   if (q) {
     list = list.filter(c => getCourseName(c).toLowerCase().includes(q) || getCourseSection(c).toLowerCase().includes(q) ||
       getCourseId(c).toLowerCase().includes(q) || getOwnerEmail(c).toLowerCase().includes(q));
   }
-  if (state.onlyOrphaned) list = list.filter(isOwnerInactive);
-  state.filteredCourses = list;
+  state.filteredCourses = sortCourses(list);
+  renderCourseViewTabs();
   renderCourses();
 }
 
 function renderCourses() {
-  document.getElementById('courses-count').textContent = state.courses.length;
+  document.getElementById('courses-count').textContent = state.filteredCourses.length;
   const list = document.getElementById('courses-list');
   if (state.loadingCourses) return;
   if (!state.courses.length) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms found.</li>`; return; }
-  if (!state.filteredCourses.length) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms match your search.</li>`; return; }
+  if (!state.filteredCourses.length) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms in this view match your search.</li>`; return; }
 
+  const view = state.courseView;
   list.innerHTML = state.filteredCourses.map(c => {
     const id = getCourseId(c), name = getCourseName(c), section = getCourseSection(c);
     const isLoaded = id === state.courseId;
     const orphaned = isOwnerInactive(c);
+    const st = (c.courseState || '').toUpperCase();
     const checked = state.selectedCourseIds.has(id) ? 'checked' : '';
+    const ownerLabel = getOwnerEmail(c) || (c.ownerId ? c.ownerId : 'Unknown');
     return `
-      <li class="course-row px-4 py-3 flex items-center gap-3 ${isLoaded ? 'bg-[var(--accent-tint)]' : 'hover:bg-[var(--paper)]'}" data-course-id="${escapeHtml(id)}">
+      <li class="course-row px-4 py-3 flex items-center gap-3 ${isLoaded ? 'bg-[var(--accent-tint)]' : 'hover:bg-[var(--panel-2)]'}" data-course-id="${escapeHtml(id)}">
         <input type="checkbox" class="course-checkbox role-write rounded border-[var(--line)] shrink-0" data-id="${escapeHtml(id)}" ${checked}>
-        <span class="w-8 h-8 rounded-lg ${isLoaded ? 'bg-white text-[var(--accent-ink)]' : 'bg-[var(--paper)] text-[var(--ink-soft)]'} flex items-center justify-center shrink-0 cursor-pointer course-open">
+        <span class="w-8 h-8 rounded-lg ${isLoaded ? 'bg-[var(--panel-2)] text-[var(--accent-ink)]' : 'bg-[var(--panel-2)] text-[var(--ink-soft)]'} flex items-center justify-center shrink-0 cursor-pointer course-open">
           <span class="w-4 h-4 block">${ICONS.book}</span>
         </span>
         <div class="min-w-0 flex-1 cursor-pointer course-open">
           <p class="text-sm font-medium ${isLoaded ? 'text-[var(--accent-ink)]' : ''} truncate">${escapeHtml(name)}</p>
           <p class="text-xs text-[var(--ink-faint)] truncate">${section ? escapeHtml(section) + ' · ' : ''}ID ${escapeHtml(id)} · Created ${fmtDate(c.creationTime)} · Last active ${fmtDate(c.updateTime)}</p>
+          <p class="text-xs truncate mt-0.5 flex items-center gap-1 ${orphaned ? 'text-[var(--warn)]' : 'text-[var(--ink-soft)]'}">
+            <span class="w-3 h-3 shrink-0 ${orphaned ? 'text-[var(--warn)]' : 'text-[var(--accent)]'}">${ICONS.star}</span>
+            Primary teacher: ${escapeHtml(ownerLabel)}${orphaned ? ' (inactive)' : ''}
+          </p>
         </div>
-        ${orphaned ? `<span class="shrink-0 flex items-center gap-1 text-xs font-medium text-[var(--warn)] bg-[var(--warn-tint)] rounded-full px-2 py-0.5" title="Owner account is suspended or deleted"><span class="w-3 h-3 block">${ICONS.warn}</span>Owner inactive</span>` : ''}
-        <span class="shrink-0 text-xs font-medium rounded-full px-2 py-0.5 ${c.courseState === 'ACTIVE' ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--paper)] text-[var(--ink-soft)]'}">${escapeHtml(c.courseState || '')}</span>
+        <span class="shrink-0 text-xs font-medium rounded-full px-2 py-0.5 ${st === 'ACTIVE' ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--panel-2)] text-[var(--ink-soft)]'}">${escapeHtml(c.courseState || '')}</span>
+        <div class="shrink-0 flex items-center gap-1 role-write">
+          ${st !== 'ARCHIVED' ? `<button class="course-archive-one w-7 h-7 flex items-center justify-center rounded-lg text-[var(--warn)] hover:bg-[var(--warn-tint)] transition focus-ring" data-id="${escapeHtml(id)}" title="Archive">${ICONS.building}</button>` : ''}
+          ${st === 'ARCHIVED' ? `<button class="course-unarchive-one w-7 h-7 flex items-center justify-center rounded-lg text-[var(--accent-ink)] hover:bg-[var(--accent-tint)] transition focus-ring" data-id="${escapeHtml(id)}" title="Unarchive">${ICONS.refresh}</button>` : ''}
+          <button class="course-delete-one w-7 h-7 flex items-center justify-center rounded-lg text-[var(--bad)] hover:bg-[var(--bad-tint)] transition focus-ring" data-id="${escapeHtml(id)}" title="Delete">${ICONS.trash}</button>
+        </div>
         <span class="w-4 h-4 text-[var(--ink-faint)] shrink-0 course-open cursor-pointer">${ICONS.chevronRight}</span>
       </li>`;
   }).join('');
@@ -758,7 +893,28 @@ function renderCourses() {
       updateCourseBulkBar();
     });
   });
+  document.querySelectorAll('.course-archive-one').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); confirmSingleCourseOp(btn.dataset.id, 'archiveCourse', 'Archive classroom', 'Archive this classroom? It becomes read-only in Classroom until unarchived.', 'Archive', 'bg-[var(--warn)] hover:opacity-90'); }));
+  document.querySelectorAll('.course-unarchive-one').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); confirmSingleCourseOp(btn.dataset.id, 'unarchiveCourse', 'Unarchive classroom', 'Reactivate this classroom?', 'Unarchive', 'btn-primary'); }));
+  document.querySelectorAll('.course-delete-one').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); confirmSingleCourseOp(btn.dataset.id, 'deleteCourse', 'Delete classroom', 'Permanently delete this classroom? This can\u2019t be undone. Google only allows deleting Archived or Provisioned classrooms.', 'Delete', 'bg-[var(--bad)] hover:opacity-90'); }));
   updateCourseBulkBar();
+}
+
+function confirmSingleCourseOp(courseId, action, title, body, submitLabel, submitClass) {
+  openModal(modalShell(title, `<p class="text-sm text-[var(--ink-soft)]">${body}</p>`, submitLabel, submitClass));
+  wireModalButtons(async () => {
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Working…');
+    try {
+      await apiPost({ action, courseId });
+      showToast(`${title} succeeded.`, 'success');
+      closeModal();
+      if (state.courseId === courseId && action === 'deleteCourse') { state.courseId = ''; document.getElementById('course-id-input').value = ''; }
+      fetchCourses(true);
+    } catch (err) {
+      showToast(err.message || `${title} failed`, 'error');
+      resetButtonLoading(btn, submitLabel);
+    }
+  });
 }
 
 function updateCourseBulkBar() {
@@ -766,6 +922,10 @@ function updateCourseBulkBar() {
   const count = state.selectedCourseIds.size;
   document.getElementById('course-selected-count').textContent = count;
   bar.classList.toggle('hidden', count === 0);
+  // Only offer the actions relevant to what's actually selected/viewed.
+  const view = state.courseView;
+  document.querySelector('.bulk-archive-btn').classList.toggle('hidden', view === 'archived');
+  document.querySelector('.bulk-unarchive-btn').classList.toggle('hidden', view !== 'archived');
 }
 
 async function fetchCourseMembers(courseId) {
@@ -967,7 +1127,7 @@ function openAddStudentModal() {
     </div>
     <div id="as-panel-ou" class="hidden">
       <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Organizational Unit</label>
-      <select id="as-ou-select" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-white focus-ring">
+      <select id="as-ou-select" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-[var(--bg)] focus-ring">
         <option value="">Select an organizational unit…</option>
         ${state.ous.map(ou => `<option value="${escapeHtml(ou.orgUnitPath)}">${escapeHtml(ou.name || ou.orgUnitPath)}</option>`).join('')}
       </select>
@@ -1163,6 +1323,7 @@ function boot() {
   icon(document.getElementById('icon-courses-header'), 'book');
   icon(document.getElementById('icon-search-courses'), 'search');
   icon(document.getElementById('icon-refresh-courses'), 'refresh');
+  icon(document.getElementById('course-sort-chevron'), 'chevronDown');
   icon(document.getElementById('icon-spinner-courses'), 'spinner');
   icon(document.getElementById('icon-enroll-ou'), 'building');
   icon(document.getElementById('icon-logo-login'), 'logo');
@@ -1226,9 +1387,11 @@ function boot() {
   document.getElementById('btn-export-grades').addEventListener('click', exportGrades);
   document.getElementById('btn-export-topics').addEventListener('click', exportTopics);
   document.getElementById('course-search').addEventListener('input', (e) => { state.courseSearchQuery = e.target.value; applyCourseFilter(); });
-  document.getElementById('filter-orphaned').addEventListener('change', (e) => { state.onlyOrphaned = e.target.checked; applyCourseFilter(); });
+  document.getElementById('course-sort').value = state.courseSort;
+  document.getElementById('course-sort').addEventListener('change', (e) => { state.courseSort = e.target.value; applyCourseFilter(); });
   document.getElementById('btn-refresh-courses').addEventListener('click', () => fetchCourses(true));
   document.getElementById('btn-bulk-archive').addEventListener('click', () => confirmBulkCourseOp('bulkArchiveCourses', 'Archive', 'Archive'));
+  document.getElementById('btn-bulk-unarchive').addEventListener('click', () => confirmBulkCourseOp('bulkUnarchiveCourses', 'Unarchive', 'Unarchive'));
   document.getElementById('btn-bulk-delete').addEventListener('click', () => confirmBulkCourseOp('bulkDeleteCourses', 'Delete', 'Permanently delete'));
   document.getElementById('btn-course-clear-selection').addEventListener('click', () => { state.selectedCourseIds.clear(); renderCourses(); });
   document.getElementById('btn-select-all-students').addEventListener('click', () => {
