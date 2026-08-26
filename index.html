@@ -61,6 +61,25 @@
   }
   h1,h2,h3,p{ line-height:1.25; }
   .font-mono{ font-family:'Roboto Mono', ui-monospace, monospace; }
+  /* Remove bullet markers from every list in the app — plain UL/OL are used
+     purely as row containers (courses, students, teachers, mappings, etc.),
+     never as literal bulleted lists. */
+  ul, ol{ list-style:none; margin:0; padding:0; }
+  /* UnoCSS's text-{size} utilities each ship their own (fairly loose)
+     companion line-height, which reads as an oversized gap between lines
+     regardless of the line-height set on html/body/h1-3/p above, since the
+     utility classes have equal-or-higher specificity and are injected after
+     this stylesheet. Tighten them explicitly so type sits close together. */
+  .text-xs{ line-height:1.35 !important; }
+  .text-sm{ line-height:1.4 !important; }
+  .text-base{ line-height:1.35 !important; }
+  .text-lg{ line-height:1.3 !important; }
+  .text-xl{ line-height:1.28 !important; }
+  .text-2xl{ line-height:1.22 !important; }
+  .text-\[10px\]{ line-height:1.35 !important; }
+  .text-\[\.65rem\]{ line-height:1.35 !important; }
+  .text-\[\.68rem\]{ line-height:1.35 !important; }
+  .text-\[\.72rem\]{ line-height:1.35 !important; }
   ::-webkit-scrollbar{ width:10px; height:10px; }
   ::-webkit-scrollbar-track{ background:transparent; }
   ::-webkit-scrollbar-thumb{ background:rgba(24,42,32,.16); border-radius:10px; border:3px solid transparent; background-clip:content-box; }
@@ -75,8 +94,39 @@
   .pill-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
   .pill-btn.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); }
   .focus-ring:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
-  .btn-primary{ background:var(--accent); color:#08150e; font-weight:600; }
-  .btn-primary:hover{ filter:brightness(1.08); }
+
+  /* ---- Translucent / frosted button system ----
+     One consistent glassy treatment for every button in the app instead of
+     a mix of flat borders, solid squares, and one-off colors: a frosted
+     primary (accent tint + blur) and a frosted ghost/icon variant (neutral
+     tint + blur) that both sit on top of the soft green page gradient. */
+  .btn-primary{
+    background:rgba(44,161,95,.88); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.35); color:#08150e; font-weight:600;
+    box-shadow:0 1px 2px rgba(24,42,32,.06), 0 6px 16px rgba(44,161,95,.18);
+  }
+  .btn-primary:hover{ background:rgba(44,161,95,.98); }
+  .btn-primary:disabled{ opacity:.55; }
+
+  .btn-ghost{
+    background:rgba(255,255,255,.55); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(224,237,228,.9); color:var(--ink-soft);
+  }
+  .btn-ghost:hover{ background:rgba(255,255,255,.82); color:var(--ink); border-color:rgba(139,154,145,.6); }
+  .btn-ghost:disabled{ opacity:.5; }
+
+  .btn-icon-tint{
+    background:rgba(44,161,95,.14); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(44,161,95,.22); color:var(--accent-ink);
+  }
+  .btn-icon-tint:hover{ background:rgba(44,161,95,.24); }
+  .btn-icon-tint:disabled{ opacity:.5; }
+
+  .btn-icon-neutral{
+    background:rgba(255,255,255,.55); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(224,237,228,.9); color:var(--ink-soft);
+  }
+  .btn-icon-neutral:hover{ background:rgba(255,255,255,.85); color:var(--ink); }
   .stat-card{ background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--card-shadow); position:relative; overflow:hidden; }
   .stat-icon-badge{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; position:absolute; top:14px; right:14px; }
   .role-hide{ display:none !important; }
@@ -117,15 +167,8 @@
   input::placeholder, textarea::placeholder{ color:var(--ink-faint); }
   .border-\[var\(--line\)\]{ border-color:var(--line) !important; }
 
-  #btn-refresh-ous, #btn-refresh-courses, #btn-refresh-drawer{ background:var(--panel-2); }
-  #btn-open-enroll-ou, #btn-open-add-teacher, #btn-open-create-course,
-  #btn-export-grades, #btn-export-topics{
-    background:transparent; border:1px solid var(--line); color:var(--ink-soft);
-    border-radius:999px;
-  }
-  #btn-open-enroll-ou:hover, #btn-open-add-teacher:hover, #btn-open-create-course:hover,
-  #btn-export-grades:hover, #btn-export-topics:hover{ color:var(--ink); border-color:var(--ink-soft); background:transparent; }
-  #btn-open-add-student{ border-radius:999px; }
+  #btn-open-create-course, #btn-export-grades, #btn-export-topics{ border-radius:999px; }
+  #btn-open-add-student, #btn-open-add-teacher{ border-radius:999px; }
 
   .divide-y > *{ border-color:var(--line) !important; }
   .border-b{ border-color:var(--line) !important; }
@@ -147,15 +190,18 @@
   /* Negative margin pulls the drawer flush against the fixed icon rail, so
      it reads as an extension of the rail rather than a separate floating
      panel — "attached" rather than a gap + rounded corners on all sides. */
-  #classrooms-shell{ display:flex; align-items:flex-start; gap:16px; margin-left:-24px; }
+  #classrooms-shell{
+    display:flex; align-items:stretch; gap:16px; margin-left:-24px;
+    height:calc(100vh - var(--header-h) - 148px); min-height:420px;
+  }
   #classroom-drawer{
     width:300px; flex-shrink:0; background:var(--panel); border:1px solid var(--line); border-left:none;
     border-radius:0 14px 14px 0; display:flex; flex-direction:column; min-height:0;
-    height:calc(100vh - var(--header-h) - 150px); min-height:360px; box-shadow:var(--card-shadow);
+    height:100%; box-shadow:var(--card-shadow);
     transition:width .18s ease, opacity .18s ease;
   }
   #classroom-drawer.collapsed{ width:0; border:0; opacity:0; overflow:hidden; margin-right:-16px; }
-  #classroom-workspace{ flex:1; min-width:0; }
+  #classroom-workspace{ flex:1; min-width:0; height:100%; overflow-y:auto; padding-right:2px; }
   #drawer-toggle{
     width:28px; height:28px; border-radius:8px; border:1px solid var(--line); color:var(--ink-soft);
     display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--panel-2);
@@ -163,11 +209,13 @@
   .drawer-filter-tab{ font-size:.72rem; padding:5px 8px; border-radius:999px; color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); white-space:nowrap; }
   .drawer-filter-tab.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); font-weight:600; }
   .drawer-list-wrap{ flex:1 1 auto; min-height:0; overflow-y:auto; }
-  .drawer-course-item{ padding:10px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .drawer-course-item{ padding:10px 12px 10px 10px; border-bottom:1px solid var(--line); border-left:3px solid transparent; cursor:pointer; }
   .drawer-course-item:hover{ background:var(--panel-2); }
-  .drawer-course-item.is-selected{ background:var(--accent); }
-  .drawer-course-item.is-selected p{ color:#08150e; }
-  .drawer-course-item.is-selected .text-\[var\(--ink-faint\)\]{ color:#08150e; opacity:.75; }
+  /* Selected item: a soft accent tint + left rail, not a solid green fill —
+     keeps it readable and in line with the rest of the light card theme. */
+  .drawer-course-item.is-selected{ background:var(--accent-tint); border-left-color:var(--accent); }
+  .drawer-course-item.is-selected p{ color:var(--ink); }
+  .drawer-course-item.is-selected .text-\[var\(--ink-faint\)\]{ color:var(--ink-soft); opacity:1; }
   #workspace-split{ display:grid; grid-template-columns:1fr; gap:16px; }
   @media (min-width:900px){ #workspace-split{ grid-template-columns:1fr 1fr; } }
 
@@ -227,7 +275,7 @@
           <p id="whoami-email" class="text-xs font-semibold truncate max-w-[220px]">—</p>
           <p id="whoami-role" class="text-[.65rem] opacity-70 truncate">—</p>
         </div>
-        <button id="btn-sign-out" class="text-xs font-semibold bg-[#08150e]/15 hover:bg-[#08150e]/25 rounded-lg px-3 py-1.5 transition focus-ring">Sign out</button>
+        <button id="btn-sign-out" class="btn-ghost text-xs font-semibold rounded-lg px-3 py-1.5 transition focus-ring">Sign out</button>
       </div>
     </header>
 
@@ -319,7 +367,7 @@
                     </select>
                     <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]" id="ou-chevron"></div>
                   </div>
-                  <button id="btn-refresh-ous" title="Refresh OUs" class="h-9 w-9 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-95 transition-all shrink-0 focus-ring">
+                  <button id="btn-refresh-ous" title="Refresh organizational units and roster" class="btn-icon-neutral h-9 w-9 flex items-center justify-center rounded-lg active:scale-95 transition-all shrink-0 focus-ring">
                     <span class="w-4 h-4 block" id="icon-refresh-ous"></span>
                   </button>
                 </div>
@@ -376,10 +424,10 @@
         <section id="view-classrooms" class="hidden">
           <div class="flex items-center gap-2 mb-3 flex-wrap">
             <div class="view-headline mb-0"><h1>Manage Classrooms</h1></div>
-            <button id="drawer-toggle" title="Toggle classroom list" class="ml-1 focus-ring">
+            <button id="drawer-toggle" title="Toggle classroom list" class="btn-icon-neutral ml-1 focus-ring">
               <span class="w-3.5 h-3.5" id="icon-drawer-toggle"></span>
             </button>
-            <button id="btn-open-create-course" class="role-write ml-auto h-9 px-4 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
+            <button id="btn-open-create-course" class="btn-ghost role-write ml-auto h-9 px-4 rounded-lg text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
               <span class="w-3.5 h-3.5" id="icon-create-course"></span> New classroom
             </button>
           </div>
@@ -393,7 +441,7 @@
                     <span class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-faint)]" id="icon-search-courses"></span>
                     <input id="course-search" type="text" placeholder="Search classrooms…" class="w-full border border-[var(--line)] rounded-lg pl-8 pr-2 py-1.5 text-xs focus-ring">
                   </div>
-                  <button id="btn-refresh-drawer" title="Refresh classrooms" class="h-8 w-8 flex items-center justify-center rounded-lg border border-[var(--line)] text-[var(--ink-soft)] hover:text-[var(--ink)] shrink-0 focus-ring">
+                  <button id="btn-refresh-drawer" title="Refresh classrooms" class="btn-icon-neutral h-8 w-8 flex items-center justify-center rounded-lg shrink-0 focus-ring">
                     <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
                   </button>
                 </div>
@@ -441,12 +489,13 @@
                   <div class="min-w-0">
                     <h2 id="workspace-course-name" class="text-base font-bold truncate">—</h2>
                     <p id="workspace-course-id" class="text-xs text-[var(--ink-faint)] font-mono leading-tight">—</p>
+                    <p id="workspace-course-dates" class="text-xs text-[var(--ink-faint)] mt-0.5">Created — &middot; Last active —</p>
                   </div>
                   <div class="flex gap-2 shrink-0">
-                    <button id="btn-export-grades" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
+                    <button id="btn-export-grades" class="btn-ghost h-9 px-3 rounded-lg text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
                       <span class="w-3.5 h-3.5" id="icon-export-grades"></span> Export grades
                     </button>
-                    <button id="btn-export-topics" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
+                    <button id="btn-export-topics" class="btn-ghost h-9 px-3 rounded-lg text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
                       <span class="w-3.5 h-3.5" id="icon-export-topics"></span> Export topics &amp; assignments
                     </button>
                   </div>
@@ -464,7 +513,7 @@
                         <h2 class="font-semibold">Students</h2>
                         <span id="students-count" class="text-xs font-medium bg-[var(--good-tint)] text-[var(--good)] rounded-full px-2 py-0.5">0</span>
                         <button id="btn-select-all-students" class="role-write text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Select all</button>
-                        <button id="btn-open-add-student" class="role-write ml-auto w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--good)] text-white focus-ring" title="Add students">
+                        <button id="btn-open-add-student" class="btn-icon-tint role-write ml-auto w-7 h-7 flex items-center justify-center rounded-lg focus-ring" title="Add students">
                           <span class="w-4 h-4" id="icon-add-student"></span>
                         </button>
                       </div>
@@ -499,7 +548,7 @@
                         <h2 class="font-semibold">Teachers</h2>
                         <span id="teachers-count" class="text-xs font-medium bg-[var(--accent-tint)] text-[var(--accent-ink)] rounded-full px-2 py-0.5">0</span>
                         <div class="relative ml-auto role-admin">
-                          <button id="btn-open-add-teacher" class="w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--accent)] text-[#08150e] focus-ring" title="Teacher actions">
+                          <button id="btn-open-add-teacher" class="btn-icon-tint w-7 h-7 flex items-center justify-center rounded-lg focus-ring" title="Teacher actions">
                             <span class="w-4 h-4" id="icon-add-teacher"></span>
                           </button>
                         </div>
@@ -600,7 +649,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbxtlEhj_s0OTadz7FUNtl5Xz3BbIRLvFqkcYe9cw8ew1dxJhPA1C8ZdU9GELKGtrkc/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwwIWEnBH2h3dAtqHMN7Sb0_SL3SpEVnuPEommEKVqVKB5T9ItPIXzL-i4XY1bwQ5H2/exec";
 const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
@@ -704,6 +753,12 @@ function getCourseName(c) { return c?.name || c?.courseName || getCourseId(c); }
 function getCourseSection(c) { return c?.section || c?.descriptionHeading || ''; }
 function isOwnerInactive(c) { return c?.ownerInactive === true; }
 function getOwnerEmail(c) { return c?.ownerEmail || c?.teacherEmail || ''; }
+function formatShortDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
 function fmtDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -861,8 +916,8 @@ function setActiveView(view) {
 /* ============================================================
    SUMMARY VIEW
    ============================================================ */
-async function loadOrgStats() {
-  const data = await apiGetOptional({ action: 'getOrgStats' });
+async function loadOrgStats(forceRefresh) {
+  const data = await apiGetOptional({ action: 'getOrgStats', refresh: forceRefresh ? '1' : '0' });
   if (data) state.orgStats = data;
   renderSummaryStats();
 }
@@ -889,12 +944,12 @@ function renderSummaryStats() {
 /* ============================================================
    VIEW: STUDENTS & STAFF (OU roster inspector)
    ============================================================ */
-async function fetchOUs() {
+async function fetchOUs(forceRefresh) {
   const select = document.getElementById('ou-select');
   select.innerHTML = `<option value="">Loading organizational units…</option>`;
   select.disabled = true;
   try {
-    const data = await apiGet({ action: 'getOUs' });
+    const data = await apiGet({ action: 'getOUs', refresh: forceRefresh ? '1' : '0' });
     const ous = data.ous || [];
     state.ous = ous;
     const opts = ous.length
@@ -921,12 +976,12 @@ function populateOuDependentSelects() {
   if (state.appSettings.studentParentOU) document.getElementById('setting-student-ou').value = state.appSettings.studentParentOU;
 }
 
-async function fetchUsersByOU(orgUnitPath) {
+async function fetchUsersByOU(orgUnitPath, forceRefresh) {
   state.loadingUsers = true;
   document.getElementById('ou-loading').classList.remove('hidden');
   document.getElementById('user-search').disabled = true;
   try {
-    const data = await apiGet({ action: 'getUsersByOU', orgUnitPath });
+    const data = await apiGet({ action: 'getUsersByOU', orgUnitPath, refresh: forceRefresh ? '1' : '0' });
     // Bug fix: some backends return users from sub-OUs too. Strictly keep
     // only users whose orgUnitPath exactly matches the selected OU.
     const raw = data.users || [];
@@ -1092,6 +1147,7 @@ function renderCourses() {
           <div class="min-w-0 flex-1 course-open">
             <p class="text-sm font-medium truncate">${escapeHtml(name)}</p>
             <p class="text-xs text-[var(--ink-faint)] truncate">${escapeHtml(section || id)} ${isOwnerInactive(c) ? `<span class="text-[var(--warn)]">· owner inactive</span>` : ''}</p>
+            <p class="text-[10px] text-[var(--ink-faint)] truncate mt-0.5">Created ${formatShortDate(c.creationTime)} &middot; Active ${formatShortDate(c.updateTime)}</p>
           </div>
         </div>
       </li>`;
@@ -1158,6 +1214,8 @@ async function fetchCourseMembers(courseId) {
   const course = state.courses.find(c => getCourseId(c) === courseId);
   document.getElementById('workspace-course-name').textContent = course ? getCourseName(course) : courseId;
   document.getElementById('workspace-course-id').textContent = courseId;
+  document.getElementById('workspace-course-dates').textContent =
+    `Created ${formatShortDate(course?.creationTime)} \u00b7 Last active ${formatShortDate(course?.updateTime)}`;
   document.getElementById('teachers-loading').classList.remove('hidden');
   document.getElementById('students-loading').classList.remove('hidden');
   ['btn-open-add-teacher','btn-open-add-student','btn-export-grades','btn-export-topics'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
@@ -1438,7 +1496,7 @@ function openAddStudentModal() {
       <div class="relative">
         <div class="flex gap-2">
           <input id="as-student-search" type="text" autocomplete="off" placeholder="Type a name or email…" class="flex-1 min-w-0 border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
-          <button type="button" id="as-student-search-btn" class="shrink-0 h-full px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] focus-ring flex items-center gap-1.5">
+          <button type="button" id="as-student-search-btn" class="btn-ghost shrink-0 h-full px-3 rounded-lg text-sm font-medium focus-ring flex items-center gap-1.5">
             <span class="w-3.5 h-3.5" id="icon-as-search"></span> Search
           </button>
         </div>
@@ -1761,7 +1819,11 @@ function boot() {
     if (state.selectedOU) fetchUsersByOU(state.selectedOU);
     else { state.users = []; state.filteredUsers = []; renderUserTable(); document.getElementById('user-search').disabled = true; }
   });
-  document.getElementById('btn-refresh-ous').addEventListener('click', fetchOUs);
+  document.getElementById('btn-refresh-ous').addEventListener('click', async () => {
+    await fetchOUs(true);
+    if (state.selectedOU) await fetchUsersByOU(state.selectedOU, true);
+    loadOrgStats(true);
+  });
   document.getElementById('user-search').addEventListener('input', (e) => { state.searchQuery = e.target.value; applyUserFilter(); });
   document.getElementById('select-all').addEventListener('change', (e) => {
     const emails = state.filteredUsers.map(getUserEmail);
