@@ -5,48 +5,46 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Classroom Admin — OU &amp; Course Manager</title>
 
-<!-- UnoCSS runtime (Tailwind-compatible utility engine, no build step) -->
 <script src="https://cdn.jsdelivr.net/npm/@unocss/runtime/uno.global.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<!-- 'Google Sans' itself is a proprietary Google typeface not distributed on
+     Google Fonts, so it can't be @import'ed on a public page. We reference it
+     first (it renders natively on ChromeOS/Android where it's a system font)
+     and fall back to Roboto — Google's own open-source product font and the
+     closest public match — everywhere else. -->
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
 
 <style>
   :root{
-    --ink:#12161c;
-    --ink-soft:#4a5261;
-    --ink-faint:#8890a0;
-    --line:#e3e6ec;
-    --paper:#f6f7fa;
+    --ink:#14201a;
+    --ink-soft:#4b5a52;
+    --ink-faint:#87958d;
+    --line:#dfe8e2;
+    --paper:#f3f8f5;
     --card:#ffffff;
-    --accent:#3452e1;
-    --accent-ink:#1f36b0;
-    --accent-tint:#eaeeff;
-    --good:#0f8a4f;
-    --good-tint:#e6f6ee;
+    --accent:#2ca15f;
+    --accent-ink:#1f7b48;
+    --accent-tint:#e4f5ea;
+    --good:#2ca15f;
+    --good-tint:#e4f5ea;
     --bad:#d7362f;
     --bad-tint:#fdeceb;
     --warn:#b5670a;
     --warn-tint:#fdf1e0;
   }
-  html,body{ font-family:'Inter',system-ui,Arial,sans-serif; color:var(--ink); }
-  .font-mono{ font-family:'IBM Plex Mono', ui-monospace, monospace; }
+  html,body{ font-family:'Google Sans','Google Sans Text',Roboto,system-ui,Arial,sans-serif; color:var(--ink); }
+  .font-mono{ font-family:'Roboto Mono', ui-monospace, monospace; }
   ::-webkit-scrollbar{ width:8px; height:8px; }
-  ::-webkit-scrollbar-thumb{ background:#c7cbd6; border-radius:8px; }
+  ::-webkit-scrollbar-thumb{ background:#c3d2ca; border-radius:8px; }
   .fade-in{ animation:fadeIn .16s ease-out; }
   @keyframes fadeIn{ from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);} }
   .toast-in{ animation:toastIn .22s cubic-bezier(.34,1.56,.64,1); }
   @keyframes toastIn{ from{opacity:0; transform:translateX(24px);} to{opacity:1; transform:translateX(0);} }
-  /* UnoCSS generates utility CSS in first-seen order, not a fixed cascade — an
-     element carrying both "hidden" and "flex" as STATIC classes (toggled via JS,
-     e.g. modal backdrops / loading overlays) can end up with display:flex
-     winning depending on generation order. Force that exact combination to
-     resolve to hidden. Scoped to .hidden.flex/.hidden.grid only — a blanket
-     ".hidden{display:none!important}" would break responsive patterns like
-     class="hidden md:flex" (the sidebar nav) at every breakpoint. */
   .hidden.flex,.hidden.grid{ display:none !important; }
   [v-cloak]{ display:none; }
-  .surface{ background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:0 1px 2px rgba(18,22,28,.03); }
+  .surface{ background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 1px 2px rgba(20,32,26,.04), 0 8px 24px -18px rgba(20,32,26,.18); }
   .nav-link{ color:var(--ink-soft); }
   .nav-link:hover{ background:var(--paper); color:var(--ink); }
   .nav-link.is-active{ background:var(--accent-tint); color:var(--accent-ink); }
@@ -55,24 +53,39 @@
   .focus-ring:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   .btn-primary{ background:var(--accent); color:#fff; }
   .btn-primary:hover{ background:var(--accent-ink); }
-  .stat-card{ background:var(--card); border:1px solid var(--line); border-radius:14px; }
+  .stat-card{ background:var(--card); border:1px solid var(--line); border-radius:16px; }
+  .role-hide{ display:none !important; }
+  .seg-btn{ color:var(--ink-soft); background:var(--paper); }
+  .seg-btn.is-active{ background:var(--accent); color:#fff; }
 </style>
 </head>
 <body class="bg-[var(--paper)] text-[var(--ink)] min-h-screen">
+
+  <!-- Sign-in gate -->
+  <div id="login-screen" class="fixed inset-0 z-[100] bg-[var(--paper)] flex items-center justify-center p-6">
+    <div class="surface p-8 max-w-sm w-full text-center">
+      <div class="w-12 h-12 rounded-2xl bg-[var(--accent)] flex items-center justify-center text-white mx-auto mb-4">
+        <span class="w-6 h-6" id="icon-logo-login"></span>
+      </div>
+      <h1 class="text-xl font-bold tracking-tight mb-1">Classroom Admin</h1>
+      <p class="text-sm text-[var(--ink-soft)] mb-6">Sign in with your Workspace account to continue.</p>
+      <div id="gis-button-container" class="flex justify-center"></div>
+      <p id="login-error" class="hidden text-sm text-[var(--bad)] mt-4"></p>
+    </div>
+  </div>
 
   <!-- Toast container -->
   <div id="toast-container" class="fixed top-4 right-4 z-[80] flex flex-col gap-2 w-[92vw] max-w-sm"></div>
 
   <!-- Modal -->
-  <div id="modal-backdrop" class="hidden fixed inset-0 bg-[#12161c]/45 z-70 flex items-center justify-center p-4">
-    <div id="modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in"></div>
+  <div id="modal-backdrop" class="hidden fixed inset-0 bg-[#14201a]/45 z-70 flex items-center justify-center p-4">
+    <div id="modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in max-h-[85vh] overflow-y-auto"></div>
   </div>
 
-  <div class="flex min-h-screen">
-    <!-- Sidebar (desktop/tablet) -->
+  <div id="app-shell" class="hidden flex min-h-screen">
     <aside class="hidden md:flex md:flex-col w-60 bg-white border-r border-[var(--line)] shrink-0">
       <div class="h-16 flex items-center gap-3 px-5 border-b border-[var(--line)]">
-        <div class="w-9 h-9 rounded-xl bg-[var(--ink)] flex items-center justify-center text-white shrink-0">
+        <div class="w-9 h-9 rounded-xl bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
           <span class="w-4.5 h-4.5" id="icon-logo"></span>
         </div>
         <div class="min-w-0">
@@ -88,17 +101,21 @@
           <span class="w-5 h-5 shrink-0" id="nav-icon-classroom"></span><span>Classrooms</span>
         </button>
       </nav>
-      <div class="px-5 py-4 border-t border-[var(--line)] text-xs text-[var(--ink-faint)]">Signed in as domain admin</div>
+      <div class="px-5 py-4 border-t border-[var(--line)]">
+        <p id="whoami-email" class="text-xs font-medium text-[var(--ink)] truncate">—</p>
+        <p id="whoami-role" class="text-xs text-[var(--ink-faint)] truncate">—</p>
+        <button id="btn-sign-out" class="mt-2 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Sign out</button>
+      </div>
     </aside>
 
     <div class="flex-1 min-w-0 flex flex-col">
-      <!-- Mobile header (sidebar collapses on small screens) -->
       <header class="md:hidden bg-white/95 backdrop-blur border-b border-[var(--line)] sticky top-0 z-30">
         <div class="px-4 py-3 flex items-center gap-3">
-          <div class="w-8 h-8 rounded-lg bg-[var(--ink)] flex items-center justify-center text-white shrink-0">
+          <div class="w-8 h-8 rounded-lg bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
             <span class="w-4 h-4" id="icon-logo-mobile"></span>
           </div>
           <h1 class="text-base font-bold flex-1 truncate tracking-tight">Classroom Admin</h1>
+          <button id="btn-sign-out-mobile" class="text-xs font-medium text-[var(--accent-ink)] focus-ring">Sign out</button>
         </div>
         <div class="px-4 pb-3 flex gap-2">
           <button data-tab="ou" class="tab-btn pill-btn flex-1 text-sm font-medium rounded-lg py-2 transition-colors focus-ring">OU &amp; Students</button>
@@ -136,9 +153,9 @@
           </div>
         </div>
 
-        <div id="selection-bar" class="hidden mt-4 flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[#c9d3fb] rounded-lg px-3 py-2">
+        <div id="selection-bar" class="hidden mt-4 flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[#bfe6cf] rounded-lg px-3 py-2">
           <span class="text-sm text-[var(--accent-ink)] font-medium"><span id="selected-count">0</span> student(s) selected</span>
-          <button id="btn-enroll-selected" class="ml-auto text-sm font-medium text-white btn-primary active:scale-[0.98] transition-all rounded-lg px-3 py-1.5 flex items-center gap-1.5 focus-ring">
+          <button id="btn-enroll-selected" class="role-hide role-write ml-auto text-sm font-medium text-white btn-primary active:scale-[0.98] transition-all rounded-lg px-3 py-1.5 flex items-center gap-1.5 focus-ring">
             <span class="w-3.5 h-3.5" id="icon-enroll-selected"></span> Enroll in course
           </button>
           <button id="btn-clear-selection" class="text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1.5 focus-ring">Clear</button>
@@ -174,23 +191,22 @@
     <!-- TAB 2: Classroom & Member Inspector -->
     <section id="view-classroom" class="hidden">
 
-      <!-- Domain-wide classroom stats -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <div class="stat-card p-4">
           <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Total classrooms</p>
-          <p id="stat-total-courses" class="text-2xl font-extrabold tracking-tight">—</p>
+          <p id="stat-total-courses" class="text-2xl font-black tracking-tight">—</p>
         </div>
         <div class="stat-card p-4">
           <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Active classrooms</p>
-          <p id="stat-active-courses" class="text-2xl font-extrabold tracking-tight">—</p>
+          <p id="stat-active-courses" class="text-2xl font-black tracking-tight">—</p>
         </div>
         <div class="stat-card p-4">
           <p class="text-xs font-semibold text-[var(--warn)] uppercase tracking-wide mb-1">Owner deactivated</p>
-          <p id="stat-orphaned-courses" class="text-2xl font-extrabold tracking-tight text-[var(--warn)]">—</p>
+          <p id="stat-orphaned-courses" class="text-2xl font-black tracking-tight text-[var(--warn)]">—</p>
         </div>
         <div class="stat-card p-4">
           <p class="text-xs font-semibold text-[var(--ink-faint)] uppercase tracking-wide mb-1">Distinct teachers</p>
-          <p id="stat-teacher-count" class="text-2xl font-extrabold tracking-tight">—</p>
+          <p id="stat-teacher-count" class="text-2xl font-black tracking-tight">—</p>
         </div>
       </div>
 
@@ -204,19 +220,28 @@
                 class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring transition-shadow">
             </div>
           </div>
-          <div class="flex sm:items-end">
+          <div class="flex sm:items-end gap-2">
             <button id="btn-load-course" class="w-full sm:w-auto h-9 px-4 rounded-lg btn-primary text-sm font-medium active:scale-[0.98] transition-all focus-ring">Load roster</button>
+            <button id="btn-open-create-course" class="role-write w-full sm:w-auto h-9 px-4 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
+              <span class="w-3.5 h-3.5" id="icon-create-course"></span> New classroom
+            </button>
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button id="btn-open-enroll-ou" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
+          <button id="btn-open-enroll-ou" class="role-write h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
             <span class="w-3.5 h-3.5" id="icon-enroll-ou"></span> Enroll by OU
           </button>
-          <button id="btn-open-add-teacher" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
+          <button id="btn-open-add-teacher" class="role-admin h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
             <span class="w-3.5 h-3.5" id="icon-add-teacher"></span> Assign teacher
           </button>
-          <button id="btn-open-add-student" class="h-9 px-3 rounded-lg bg-[var(--good)] text-white text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
+          <button id="btn-open-add-student" class="role-write h-9 px-3 rounded-lg bg-[var(--good)] text-white text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
             <span class="w-3.5 h-3.5" id="icon-add-student"></span> Enroll student
+          </button>
+          <button id="btn-export-grades" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
+            <span class="w-3.5 h-3.5" id="icon-export-grades"></span> Export grades
+          </button>
+          <button id="btn-export-topics" class="h-9 px-3 rounded-lg border border-[var(--line)] text-sm font-medium hover:bg-[var(--paper)] hover:border-[var(--ink-faint)] active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring disabled:opacity-50 disabled:pointer-events-none" disabled>
+            <span class="w-3.5 h-3.5" id="icon-export-topics"></span> Export topics &amp; assignments
           </button>
         </div>
       </div>
@@ -230,7 +255,7 @@
             </div>
           </div>
           <div class="px-4 py-3 border-b border-[var(--paper)] space-y-3">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <span class="w-4 h-4 text-[var(--ink-soft)] shrink-0" id="icon-courses-header"></span>
               <h2 class="font-semibold shrink-0">All classrooms</h2>
               <span id="courses-count" class="text-xs font-medium bg-[var(--paper)] text-[var(--ink-soft)] rounded-full px-2 py-0.5 shrink-0">0</span>
@@ -249,16 +274,21 @@
                 <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
               </button>
             </div>
+            <div id="course-bulk-bar" class="hidden flex flex-wrap items-center gap-3 bg-[var(--accent-tint)] border border-[#bfe6cf] rounded-lg px-3 py-2">
+              <span class="text-sm text-[var(--accent-ink)] font-medium"><span id="course-selected-count">0</span> classroom(s) selected</span>
+              <button id="btn-bulk-archive" class="role-write ml-auto text-sm font-medium text-[var(--warn)] hover:opacity-70 px-2 py-1 focus-ring">Archive</button>
+              <button id="btn-bulk-delete" class="role-write text-sm font-medium text-[var(--bad)] hover:opacity-70 px-2 py-1 focus-ring">Delete</button>
+              <button id="btn-course-clear-selection" class="text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1 focus-ring">Clear</button>
+            </div>
             <p class="text-xs text-[var(--ink-faint)] leading-snug">Classrooms are listed domain-wide, including courses owned by teachers whose accounts are suspended or deleted.</p>
           </div>
-          <ul id="courses-list" class="divide-y divide-[var(--paper)] max-h-80 overflow-y-auto">
+          <ul id="courses-list" class="divide-y divide-[var(--paper)] max-h-96 overflow-y-auto">
             <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Loading classrooms…</li>
           </ul>
         </div>
       </div>
 
       <div class="grid md:grid-cols-2 gap-4">
-        <!-- Teachers -->
         <div class="surface border-l-[3px] border-l-[var(--accent)] overflow-hidden">
           <div class="relative">
             <div id="teachers-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
@@ -275,7 +305,6 @@
           </div>
         </div>
 
-        <!-- Students -->
         <div class="surface border-l-[3px] border-l-[var(--good)] overflow-hidden">
           <div class="relative">
             <div id="students-loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
@@ -285,6 +314,11 @@
               <span class="w-4 h-4 text-[var(--good)]" id="icon-students-header"></span>
               <h2 class="font-semibold">Students</h2>
               <span id="students-count" class="ml-auto text-xs font-medium bg-[var(--good-tint)] text-[var(--good)] rounded-full px-2 py-0.5">0</span>
+              <button id="btn-select-all-students" class="role-write ml-2 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Select all</button>
+            </div>
+            <div id="student-bulk-bar" class="hidden px-4 py-2 flex items-center gap-3 bg-[var(--accent-tint)] border-b border-[#bfe6cf]">
+              <span class="text-xs text-[var(--accent-ink)] font-medium"><span id="student-selected-count">0</span> selected</span>
+              <button id="btn-bulk-remove-students" class="role-write ml-auto text-xs font-medium text-[var(--bad)] hover:opacity-70 focus-ring">Remove selected</button>
             </div>
             <ul id="students-list" class="divide-y divide-[var(--paper)]">
               <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its students.</li>
@@ -300,14 +334,13 @@
 
 <script>
 /* ============================================================
-   CONFIG — replace with your deployed Apps Script Web App URL
-   (Deploy > New deployment > Web app > "Execute as: Me",
-   "Who has access: Anyone within <your domain>" or "Anyone").
+   CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbw7nGDqv2i_9qZCdx793WTJsn8cphH7FJ4Y_IZg4MyjTTUKEBWXl89ep3ONKLnK36vs/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzakp5tQqg_9ZsMhkVA6c4SLsRFQweBzaqVTiWvjj9lrkOOK1VuxTQpLuW634cc7s9i/exechttps://script.google.com/macros/s/AKfycbx6903_ATj9fqJBH-6eUhKnd4t16b0-epsEFyTUFP0K3g4NbCjKdpQfJ75Au1B33RMz/exec";
+const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
-   ICONS — raw inline SVG, no external icon libraries
+   ICONS
    ============================================================ */
 const ICONS = {
   logo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5-10-5z"></path><path d="M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"></path></svg>`,
@@ -327,6 +360,8 @@ const ICONS = {
   book: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5v-13A2.5 2.5 0 0 1 6.5 3z"></path></svg>`,
   chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>`,
   warn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 1 21h22L12 2z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12" y2="17.01"></line></svg>`,
+  star: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>`,
+  download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M4 21h16"></path></svg>`,
 };
 function icon(el, name, extraClass) {
   if (!el) return;
@@ -339,6 +374,8 @@ function icon(el, name, extraClass) {
    STATE
    ============================================================ */
 const state = {
+  idToken: '',
+  me: null, // { email, role, ouScope }
   activeTab: 'ou',
   ous: [],
   selectedOU: '',
@@ -346,7 +383,6 @@ const state = {
   filteredUsers: [],
   selectedUserIds: new Set(),
   searchQuery: '',
-  loadingOUs: false,
   loadingUsers: false,
   courseId: '',
   courses: [],
@@ -354,10 +390,10 @@ const state = {
   courseSearchQuery: '',
   onlyOrphaned: false,
   loadingCourses: false,
-  courseOuFilter: '',
+  selectedCourseIds: new Set(),
   teachers: [],
   students: [],
-  loadingMembers: false,
+  selectedStudentIds: new Set(),
 };
 
 /* ============================================================
@@ -371,42 +407,34 @@ function initials(name) {
   if (!parts.length) return '?';
   return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
 }
-function getUserName(u) {
-  return u?.name?.fullName || u?.fullName || u?.name || u?.primaryEmail || 'Unknown';
-}
-function getUserEmail(u) {
-  return u?.primaryEmail || u?.email || '';
-}
+function getUserName(u) { return u?.name?.fullName || u?.fullName || u?.name || u?.primaryEmail || 'Unknown'; }
+function getUserEmail(u) { return u?.primaryEmail || u?.email || ''; }
 function isUserActive(u) {
   if (typeof u?.suspended === 'boolean') return !u.suspended;
   if (typeof u?.active === 'boolean') return u.active;
   if (typeof u?.status === 'string') return u.status.toLowerCase() === 'active';
   return true;
 }
-function getMemberName(m) {
-  return m?.profile?.name?.fullName || m?.name?.fullName || m?.fullName || m?.name || m?.profile?.emailAddress || m?.email || 'Unknown';
+function getMemberName(m) { return m?.profile?.name?.fullName || m?.name?.fullName || m?.fullName || m?.name || m?.profile?.emailAddress || m?.email || 'Unknown'; }
+function getMemberEmail(m) { return m?.profile?.emailAddress || m?.email || m?.emailAddress || ''; }
+function getCourseId(c) { return c?.id || c?.courseId || ''; }
+function getCourseName(c) { return c?.name || c?.courseName || getCourseId(c); }
+function getCourseSection(c) { return c?.section || c?.descriptionHeading || ''; }
+function isOwnerInactive(c) { return c?.ownerInactive === true; }
+function getOwnerEmail(c) { return c?.ownerEmail || c?.teacherEmail || ''; }
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
-function getMemberEmail(m) {
-  return m?.profile?.emailAddress || m?.email || m?.emailAddress || '';
-}
-function getCourseId(c) {
-  return c?.id || c?.courseId || '';
-}
-function getCourseName(c) {
-  return c?.name || c?.courseName || getCourseId(c);
-}
-function getCourseSection(c) {
-  return c?.section || c?.descriptionHeading || '';
-}
-// True when the backend has flagged the course owner as suspended/deleted.
-// The backend (getCourses) should attach this boolean per course — see
-// Code.gs's buildCourseRecord(). Falls back to false if absent so older
-// backend responses don't break the UI.
-function isOwnerInactive(c) {
-  return c?.ownerInactive === true;
-}
-function getOwnerEmail(c) {
-  return c?.ownerEmail || c?.teacherEmail || '';
+function downloadText(filename, text) {
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /* ============================================================
@@ -416,7 +444,7 @@ function showToast(message, type = 'success') {
   const container = document.getElementById('toast-container');
   const el = document.createElement('div');
   const isSuccess = type === 'success';
-  el.className = `toast-in flex items-start gap-3 rounded-xl shadow-lg border px-4 py-3 text-sm ${isSuccess ? 'bg-white border-[#c8e9d6]' : 'bg-white border-[#f6c9c5]'}`;
+  el.className = `toast-in flex items-start gap-3 rounded-xl shadow-lg border px-4 py-3 text-sm ${isSuccess ? 'bg-white border-[#bfe6cf]' : 'bg-white border-[#f6c9c5]'}`;
   el.innerHTML = `
     <span class="w-5 h-5 shrink-0 mt-0.5 ${isSuccess ? 'text-[var(--good)]' : 'text-[var(--bad)]'}">${ICONS[isSuccess ? 'checkCircle' : 'alertCircle']}</span>
     <span class="flex-1 text-[var(--ink)] leading-snug">${escapeHtml(message)}</span>
@@ -424,26 +452,18 @@ function showToast(message, type = 'success') {
   `;
   el.querySelector('button').addEventListener('click', () => el.remove());
   container.appendChild(el);
-  setTimeout(() => el.remove(), 5000);
+  setTimeout(() => el.remove(), 6000);
 }
 
 /* ============================================================
    API LAYER
-   Note: POST requests use Content-Type: text/plain;charset=utf-8. Apps
-   Script's web app endpoint doesn't implement doOptions(), so a POST sent
-   with 'application/json' triggers a CORS preflight (OPTIONS) that Apps
-   Script can't answer, producing "TypeError: NetworkError when attempting
-   to fetch resource". text/plain is a CORS "simple" content type, so the
-   browser sends the POST directly with no preflight. The JSON payload is
-   still sent as a JSON string in the body; Code.gs parses it manually via
-   JSON.parse(e.postData.contents).
    ============================================================ */
 async function apiGet(params, timeoutMs = 30000) {
   if (!API_URL || API_URL.indexOf('PASTE_YOUR') === 0) {
     throw new Error('Set API_URL at the top of the <script> to your deployed Apps Script Web App URL.');
   }
   const url = new URL(API_URL);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  Object.entries(Object.assign({}, params, { idToken: state.idToken })).forEach(([k, v]) => url.searchParams.set(k, v));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -453,13 +473,9 @@ async function apiGet(params, timeoutMs = 30000) {
     if (data && data.success === false) throw new Error(data.error || 'Request failed');
     return data;
   } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new Error('The request took too long and timed out. This can happen the first time classrooms are scanned on a large domain — please try again.');
-    }
+    if (err.name === 'AbortError') throw new Error('The request took too long and timed out. Please try again.');
     throw err;
-  } finally {
-    clearTimeout(timer);
-  }
+  } finally { clearTimeout(timer); }
 }
 async function apiPost(body, timeoutMs = 30000) {
   if (!API_URL || API_URL.indexOf('PASTE_YOUR') === 0) {
@@ -471,7 +487,7 @@ async function apiPost(body, timeoutMs = 30000) {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(Object.assign({}, body, { idToken: state.idToken })),
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`Server responded with status ${res.status}`);
@@ -479,13 +495,68 @@ async function apiPost(body, timeoutMs = 30000) {
     if (data && data.success === false) throw new Error(data.error || 'Request failed');
     return data;
   } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new Error('The request took too long and timed out. Please try again.');
-    }
+    if (err.name === 'AbortError') throw new Error('The request took too long and timed out. Please try again.');
     throw err;
-  } finally {
-    clearTimeout(timer);
+  } finally { clearTimeout(timer); }
+}
+
+/* ============================================================
+   AUTH — Google Identity Services
+   ============================================================ */
+function initSignIn() {
+  if (!GIS_CLIENT_ID || GIS_CLIENT_ID.indexOf('PASTE_YOUR') === 0) {
+    document.getElementById('login-error').textContent = 'Set GIS_CLIENT_ID at the top of the <script> to your Google OAuth Client ID.';
+    document.getElementById('login-error').classList.remove('hidden');
+    return;
   }
+  google.accounts.id.initialize({
+    client_id: GIS_CLIENT_ID,
+    callback: onCredential,
+    auto_select: true,
+  });
+  google.accounts.id.renderButton(document.getElementById('gis-button-container'), {
+    theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with',
+  });
+  google.accounts.id.prompt();
+}
+
+async function onCredential(response) {
+  state.idToken = response.credential;
+  try {
+    const data = await apiGet({ action: 'whoAmI' });
+    state.me = { email: data.email, role: data.role, ouScope: data.ouScope };
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app-shell').classList.remove('hidden');
+    document.getElementById('app-shell').classList.add('flex');
+    applyRoleUI();
+    boot();
+  } catch (err) {
+    state.idToken = '';
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = err.message || 'Sign-in failed.';
+    errEl.classList.remove('hidden');
+  }
+}
+
+function signOut() {
+  state.idToken = '';
+  state.me = null;
+  google.accounts.id.disableAutoSelect();
+  document.getElementById('app-shell').classList.add('hidden');
+  document.getElementById('app-shell').classList.remove('flex');
+  document.getElementById('login-screen').classList.remove('hidden');
+}
+
+function applyRoleUI() {
+  const role = state.me.role;
+  document.getElementById('whoami-email').textContent = state.me.email;
+  document.getElementById('whoami-role').textContent = { superadmin: 'Super admin', admin: 'Admin', dept_head: 'Department head', auditor: 'Auditor (read-only)' }[role] || role;
+  // role-write: superadmin/admin/dept_head can enroll/remove students.
+  // role-admin: only superadmin/admin can manage courses/teachers.
+  const canWrite = role === 'superadmin' || role === 'admin' || role === 'dept_head';
+  const isAdmin = role === 'superadmin' || role === 'admin';
+  document.querySelectorAll('.role-write').forEach(el => el.classList.toggle('role-hide', !canWrite));
+  document.querySelectorAll('.role-admin').forEach(el => el.classList.toggle('role-hide', !isAdmin));
 }
 
 /* ============================================================
@@ -497,51 +568,30 @@ function setActiveTab(tab) {
   document.getElementById('view-classroom').classList.toggle('hidden', tab !== 'classroom');
   const visible = document.getElementById(tab === 'ou' ? 'view-ou' : 'view-classroom');
   visible.classList.remove('fade-in');
-  void visible.offsetWidth; // restart animation
+  void visible.offsetWidth;
   visible.classList.add('fade-in');
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.toggle('is-active', btn.dataset.tab === tab);
-  });
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('is-active', btn.dataset.tab === tab));
 }
 
 /* ============================================================
    TAB 1: OU & STUDENT BROWSER
    ============================================================ */
 async function fetchOUs() {
-  state.loadingOUs = true;
   const select = document.getElementById('ou-select');
   select.innerHTML = `<option value="">Loading organizational units…</option>`;
   select.disabled = true;
   try {
     const data = await apiGet({ action: 'getOUs' });
-    const ous = data.ous || data.organizationUnits || (Array.isArray(data) ? data : []) || [];
+    const ous = data.ous || [];
     state.ous = ous;
-    if (!ous.length) {
-      select.innerHTML = `<option value="">No organizational units found</option>`;
-    } else {
-      select.innerHTML = `<option value="">Select an organizational unit…</option>` +
-        ous.map(ou => {
-          const path = ou.orgUnitPath || ou.path || '';
-          const name = ou.name || path;
-          return `<option value="${escapeHtml(path)}">${escapeHtml(name)}</option>`;
-        }).join('');
-    }
+    select.innerHTML = ous.length
+      ? `<option value="">Select an organizational unit…</option>` + ous.map(ou => `<option value="${escapeHtml(ou.orgUnitPath)}">${escapeHtml(ou.name || ou.orgUnitPath)}</option>`).join('')
+      : `<option value="">No organizational units found</option>`;
     select.disabled = false;
-    populateCourseOuFilter();
   } catch (err) {
     select.innerHTML = `<option value="">Failed to load OUs</option>`;
     showToast(err.message || 'Failed to load organizational units', 'error');
-  } finally {
-    state.loadingOUs = false;
   }
-}
-
-function populateCourseOuFilter() {
-  // The "scan teachers from" OU scoping control was removed from the UI in
-  // favor of always listing courses domain-wide (see fetchCourses), which is
-  // both simpler and the only way to reliably surface courses owned by
-  // suspended/deleted teachers. state.ous is still used to populate the
-  // "Enroll by OU" modal.
 }
 
 async function fetchUsersByOU(orgUnitPath) {
@@ -550,14 +600,12 @@ async function fetchUsersByOU(orgUnitPath) {
   document.getElementById('user-search').disabled = true;
   try {
     const data = await apiGet({ action: 'getUsersByOU', orgUnitPath });
-    const users = data.users || (Array.isArray(data) ? data : []) || [];
-    state.users = users;
+    state.users = data.users || [];
     state.selectedUserIds.clear();
     applyUserFilter();
     document.getElementById('user-search').disabled = false;
   } catch (err) {
-    state.users = [];
-    state.filteredUsers = [];
+    state.users = []; state.filteredUsers = [];
     renderUserTable();
     showToast(err.message || 'Failed to load roster for this OU', 'error');
   } finally {
@@ -570,8 +618,7 @@ async function fetchUsersByOU(orgUnitPath) {
 function applyUserFilter() {
   const q = state.searchQuery.trim().toLowerCase();
   state.filteredUsers = !q ? state.users.slice() : state.users.filter(u =>
-    getUserName(u).toLowerCase().includes(q) || getUserEmail(u).toLowerCase().includes(q)
-  );
+    getUserName(u).toLowerCase().includes(q) || getUserEmail(u).toLowerCase().includes(q));
   renderUserTable();
 }
 
@@ -586,44 +633,32 @@ function renderUserTable() {
     return;
   }
   tbody.innerHTML = state.filteredUsers.map(u => {
-    const email = getUserEmail(u);
-    const name = getUserName(u);
-    const active = isUserActive(u);
+    const email = getUserEmail(u), name = getUserName(u), active = isUserActive(u);
     const checked = state.selectedUserIds.has(email) ? 'checked' : '';
     return `
       <tr class="border-b border-[var(--paper)] last:border-0 hover:bg-[var(--paper)] transition">
         <td class="px-4 py-3"><input type="checkbox" data-email="${escapeHtml(email)}" class="row-checkbox rounded border-[var(--line)]" ${checked}></td>
-        <td class="px-4 py-3">
-          <div class="flex items-center gap-2.5">
-            <span class="w-7 h-7 rounded-full bg-[var(--accent-tint)] text-[var(--accent-ink)] text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
-            <span class="font-medium">${escapeHtml(name)}</span>
-          </div>
-        </td>
+        <td class="px-4 py-3"><div class="flex items-center gap-2.5">
+          <span class="w-7 h-7 rounded-full bg-[var(--accent-tint)] text-[var(--accent-ink)] text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
+          <span class="font-medium">${escapeHtml(name)}</span></div></td>
         <td class="px-4 py-3 text-[var(--ink-soft)] font-mono text-xs">${escapeHtml(email)}</td>
-        <td class="px-4 py-3">
-          <span class="text-xs font-medium rounded-full px-2 py-0.5 ${active ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--bad-tint)] text-[var(--bad)]'}">${active ? 'Active' : 'Suspended'}</span>
-        </td>
+        <td class="px-4 py-3"><span class="text-xs font-medium rounded-full px-2 py-0.5 ${active ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--bad-tint)] text-[var(--bad)]'}">${active ? 'Active' : 'Suspended'}</span></td>
       </tr>`;
   }).join('');
-
   document.querySelectorAll('.row-checkbox').forEach(cb => {
     cb.addEventListener('change', () => {
       const email = cb.dataset.email;
       if (cb.checked) state.selectedUserIds.add(email); else state.selectedUserIds.delete(email);
-      updateSelectionBar();
-      syncSelectAllState();
+      updateSelectionBar(); syncSelectAllState();
     });
   });
   syncSelectAllState();
 }
-
 function syncSelectAllState() {
   const selectAll = document.getElementById('select-all');
   const visibleEmails = state.filteredUsers.map(getUserEmail);
-  const allChecked = visibleEmails.length > 0 && visibleEmails.every(e => state.selectedUserIds.has(e));
-  selectAll.checked = allChecked;
+  selectAll.checked = visibleEmails.length > 0 && visibleEmails.every(e => state.selectedUserIds.has(e));
 }
-
 function updateSelectionBar() {
   const bar = document.getElementById('selection-bar');
   const count = state.selectedUserIds.size;
@@ -632,28 +667,22 @@ function updateSelectionBar() {
 }
 
 /* ============================================================
-   TAB 2: CLASSROOM & MEMBER INSPECTOR
+   TAB 2: CLASSROOMS
    ============================================================ */
 async function fetchCourses(forceRefresh) {
   state.loadingCourses = true;
   document.getElementById('courses-loading').classList.remove('hidden');
   try {
-    // No teacherOuPath scoping: getCourses lists every course in the domain
-    // (ACTIVE + ARCHIVED + PROVISIONED + DECLINED), including courses owned
-    // by teachers whose accounts are now suspended or deleted. See Code.gs.
-    const params = { action: 'getCourses', refresh: forceRefresh ? '1' : '0' };
-    const data = await apiGet(params, 100000);
-    const courses = data.courses || (Array.isArray(data) ? data : []) || [];
-    state.courses = courses;
+    const data = await apiGet({ action: 'getCourses', refresh: forceRefresh ? '1' : '0' }, 100000);
+    state.courses = data.courses || [];
     state.loadingCourses = false;
     applyCourseFilter();
-    renderCourseStats(data);
+    renderCourseStats();
   } catch (err) {
-    state.courses = [];
-    state.filteredCourses = [];
+    state.courses = []; state.filteredCourses = [];
     state.loadingCourses = false;
     renderCourses();
-    renderCourseStats(null);
+    renderCourseStats();
     showToast(err.message || 'Failed to load classrooms', 'error');
   } finally {
     state.loadingCourses = false;
@@ -661,7 +690,7 @@ async function fetchCourses(forceRefresh) {
   }
 }
 
-function renderCourseStats(data) {
+function renderCourseStats() {
   const total = state.courses.length;
   const active = state.courses.filter(c => (c.courseState || '').toUpperCase() === 'ACTIVE').length;
   const orphaned = state.courses.filter(isOwnerInactive).length;
@@ -676,16 +705,10 @@ function applyCourseFilter() {
   const q = state.courseSearchQuery.trim().toLowerCase();
   let list = state.courses.slice();
   if (q) {
-    list = list.filter(c =>
-      getCourseName(c).toLowerCase().includes(q) ||
-      getCourseSection(c).toLowerCase().includes(q) ||
-      getCourseId(c).toLowerCase().includes(q) ||
-      getOwnerEmail(c).toLowerCase().includes(q)
-    );
+    list = list.filter(c => getCourseName(c).toLowerCase().includes(q) || getCourseSection(c).toLowerCase().includes(q) ||
+      getCourseId(c).toLowerCase().includes(q) || getOwnerEmail(c).toLowerCase().includes(q));
   }
-  if (state.onlyOrphaned) {
-    list = list.filter(isOwnerInactive);
-  }
+  if (state.onlyOrphaned) list = list.filter(isOwnerInactive);
   state.filteredCourses = list;
   renderCourses();
 }
@@ -693,71 +716,74 @@ function applyCourseFilter() {
 function renderCourses() {
   document.getElementById('courses-count').textContent = state.courses.length;
   const list = document.getElementById('courses-list');
-
   if (state.loadingCourses) return;
-
-  if (!state.courses.length) {
-    list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms found.</li>`;
-    return;
-  }
-  if (!state.filteredCourses.length) {
-    list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms match your search.</li>`;
-    return;
-  }
+  if (!state.courses.length) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms found.</li>`; return; }
+  if (!state.filteredCourses.length) { list.innerHTML = `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">No classrooms match your search.</li>`; return; }
 
   list.innerHTML = state.filteredCourses.map(c => {
-    const id = getCourseId(c);
-    const name = getCourseName(c);
-    const section = getCourseSection(c);
-    const active = id === state.courseId;
+    const id = getCourseId(c), name = getCourseName(c), section = getCourseSection(c);
+    const isLoaded = id === state.courseId;
     const orphaned = isOwnerInactive(c);
+    const checked = state.selectedCourseIds.has(id) ? 'checked' : '';
     return `
-      <li class="card-row course-row cursor-pointer px-4 py-3 flex items-center gap-3 ${active ? 'bg-[var(--accent-tint)]' : 'hover:bg-[var(--paper)]'}" data-course-id="${escapeHtml(id)}">
-        <span class="w-8 h-8 rounded-lg ${active ? 'bg-white text-[var(--accent-ink)]' : 'bg-[var(--paper)] text-[var(--ink-soft)]'} flex items-center justify-center shrink-0">
+      <li class="course-row px-4 py-3 flex items-center gap-3 ${isLoaded ? 'bg-[var(--accent-tint)]' : 'hover:bg-[var(--paper)]'}" data-course-id="${escapeHtml(id)}">
+        <input type="checkbox" class="course-checkbox role-write rounded border-[var(--line)] shrink-0" data-id="${escapeHtml(id)}" ${checked}>
+        <span class="w-8 h-8 rounded-lg ${isLoaded ? 'bg-white text-[var(--accent-ink)]' : 'bg-[var(--paper)] text-[var(--ink-soft)]'} flex items-center justify-center shrink-0 cursor-pointer course-open">
           <span class="w-4 h-4 block">${ICONS.book}</span>
         </span>
-        <div class="min-w-0 flex-1">
-          <p class="text-sm font-medium ${active ? 'text-[var(--accent-ink)]' : ''} truncate">${escapeHtml(name)}</p>
-          <p class="text-xs text-[var(--ink-faint)] truncate">${section ? escapeHtml(section) + ' · ' : ''}ID ${escapeHtml(id)}</p>
+        <div class="min-w-0 flex-1 cursor-pointer course-open">
+          <p class="text-sm font-medium ${isLoaded ? 'text-[var(--accent-ink)]' : ''} truncate">${escapeHtml(name)}</p>
+          <p class="text-xs text-[var(--ink-faint)] truncate">${section ? escapeHtml(section) + ' · ' : ''}ID ${escapeHtml(id)} · Created ${fmtDate(c.creationTime)} · Last active ${fmtDate(c.updateTime)}</p>
         </div>
         ${orphaned ? `<span class="shrink-0 flex items-center gap-1 text-xs font-medium text-[var(--warn)] bg-[var(--warn-tint)] rounded-full px-2 py-0.5" title="Owner account is suspended or deleted"><span class="w-3 h-3 block">${ICONS.warn}</span>Owner inactive</span>` : ''}
-        <span class="w-4 h-4 text-[var(--ink-faint)] shrink-0">${ICONS.chevronRight}</span>
+        <span class="shrink-0 text-xs font-medium rounded-full px-2 py-0.5 ${c.courseState === 'ACTIVE' ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--paper)] text-[var(--ink-soft)]'}">${escapeHtml(c.courseState || '')}</span>
+        <span class="w-4 h-4 text-[var(--ink-faint)] shrink-0 course-open cursor-pointer">${ICONS.chevronRight}</span>
       </li>`;
   }).join('');
 
-  document.querySelectorAll('.course-row').forEach(row => {
-    row.addEventListener('click', () => {
-      const id = row.dataset.courseId;
+  document.querySelectorAll('.course-open').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.closest('.course-row').dataset.courseId;
       document.getElementById('course-id-input').value = id;
       state.courseId = id;
       fetchCourseMembers(id);
       renderCourses();
     });
   });
+  document.querySelectorAll('.course-checkbox').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const id = cb.dataset.id;
+      if (cb.checked) state.selectedCourseIds.add(id); else state.selectedCourseIds.delete(id);
+      updateCourseBulkBar();
+    });
+  });
+  updateCourseBulkBar();
+}
+
+function updateCourseBulkBar() {
+  const bar = document.getElementById('course-bulk-bar');
+  const count = state.selectedCourseIds.size;
+  document.getElementById('course-selected-count').textContent = count;
+  bar.classList.toggle('hidden', count === 0);
 }
 
 async function fetchCourseMembers(courseId) {
-  state.loadingMembers = true;
   document.getElementById('teachers-loading').classList.remove('hidden');
   document.getElementById('students-loading').classList.remove('hidden');
-  document.getElementById('btn-open-add-teacher').disabled = true;
-  document.getElementById('btn-open-add-student').disabled = true;
-  document.getElementById('btn-open-enroll-ou').disabled = true;
+  ['btn-open-add-teacher','btn-open-add-student','btn-open-enroll-ou','btn-export-grades','btn-export-topics'].forEach(id => document.getElementById(id).disabled = true);
   try {
     const data = await apiGet({ action: 'getCourseMembers', courseId });
     state.teachers = data.teachers || [];
     state.students = data.students || [];
+    state.selectedStudentIds.clear();
     renderMembers();
-    document.getElementById('btn-open-add-teacher').disabled = false;
-    document.getElementById('btn-open-add-student').disabled = false;
-    document.getElementById('btn-open-enroll-ou').disabled = false;
+    ['btn-open-add-teacher','btn-open-add-student','btn-open-enroll-ou','btn-export-grades','btn-export-topics'].forEach(id => document.getElementById(id).disabled = false);
   } catch (err) {
-    state.teachers = [];
-    state.students = [];
+    state.teachers = []; state.students = [];
     renderMembers();
     showToast(err.message || 'Failed to load course roster', 'error');
   } finally {
-    state.loadingMembers = false;
     document.getElementById('teachers-loading').classList.add('hidden');
     document.getElementById('students-loading').classList.add('hidden');
     renderCourses();
@@ -776,23 +802,37 @@ function renderMembers() {
   studentsList.innerHTML = state.students.length ? state.students.map(s => memberRow(s, 'student')).join('')
     : `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No students found for this course.' : 'Load a course to see its students.'}</li>`;
 
-  document.querySelectorAll('.remove-member-btn').forEach(btn => {
-    btn.addEventListener('click', () => confirmRemoveMember(btn.dataset.email, btn.dataset.role));
-  });
+  document.querySelectorAll('.remove-member-btn').forEach(btn => btn.addEventListener('click', () => confirmRemoveMember(btn.dataset.email, btn.dataset.role)));
+  document.querySelectorAll('.make-primary-btn').forEach(btn => btn.addEventListener('click', () => confirmMakePrimary(btn.dataset.email)));
+  document.querySelectorAll('.student-checkbox').forEach(cb => cb.addEventListener('change', () => {
+    const email = cb.dataset.email;
+    if (cb.checked) state.selectedStudentIds.add(email); else state.selectedStudentIds.delete(email);
+    updateStudentBulkBar();
+  }));
+  updateStudentBulkBar();
+}
+
+function updateStudentBulkBar() {
+  const bar = document.getElementById('student-bulk-bar');
+  const count = state.selectedStudentIds.size;
+  document.getElementById('student-selected-count').textContent = count;
+  bar.classList.toggle('hidden', count === 0);
 }
 
 function memberRow(m, role) {
-  const name = getMemberName(m);
-  const email = getMemberEmail(m);
+  const name = getMemberName(m), email = getMemberEmail(m);
   const accent = role === 'teacher' ? 'bg-[var(--accent-tint)] text-[var(--accent-ink)]' : 'bg-[var(--good-tint)] text-[var(--good)]';
+  const isPrimary = role === 'teacher' && m.isPrimary;
   return `
     <li class="px-4 py-3 flex items-center gap-3">
+      ${role === 'student' ? `<input type="checkbox" class="student-checkbox role-write rounded border-[var(--line)] shrink-0" data-email="${escapeHtml(email)}" ${state.selectedStudentIds.has(email) ? 'checked' : ''}>` : ''}
       <span class="w-8 h-8 rounded-full ${accent} text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
       <div class="min-w-0 flex-1">
-        <p class="text-sm font-medium truncate">${escapeHtml(name)}</p>
+        <p class="text-sm font-medium truncate flex items-center gap-1.5">${escapeHtml(name)} ${isPrimary ? `<span class="w-3.5 h-3.5 text-[var(--accent)]" title="Primary teacher">${ICONS.star}</span>` : ''}</p>
         <p class="text-xs text-[var(--ink-faint)] font-mono truncate">${escapeHtml(email)}</p>
       </div>
-      <button class="remove-member-btn shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--bad)] hover:bg-[var(--bad-tint)] transition focus-ring" data-email="${escapeHtml(email)}" data-role="${role}" title="Remove">
+      ${role === 'teacher' && !isPrimary ? `<button class="make-primary-btn role-admin shrink-0 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 transition focus-ring px-2" data-email="${escapeHtml(email)}" title="Make primary teacher">Make primary</button>` : ''}
+      <button class="remove-member-btn role-write shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--bad)] hover:bg-[var(--bad-tint)] transition focus-ring" data-email="${escapeHtml(email)}" data-role="${role}" title="Remove">
         <span class="w-4 h-4 block">${ICONS.trash}</span>
       </button>
     </li>`;
@@ -809,34 +849,75 @@ function closeModal() {
   document.getElementById('modal-backdrop').classList.add('hidden');
   document.getElementById('modal-content').innerHTML = '';
 }
-document.getElementById('modal-backdrop').addEventListener('click', (e) => {
-  if (e.target.id === 'modal-backdrop') closeModal();
-});
+document.getElementById('modal-backdrop').addEventListener('click', (e) => { if (e.target.id === 'modal-backdrop') closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
-function openAddTeacherModal() {
-  openModal(`
+function modalShell(title, bodyHtml, submitLabel, submitClass) {
+  return `
     <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-bold tracking-tight">Assign teacher</h3>
+      <h3 class="text-lg font-bold tracking-tight">${title}</h3>
       <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
     </div>
-    <p class="text-sm text-[var(--ink-soft)] mb-3">Add a co-teacher to course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
-    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Teacher email</label>
-    <div class="relative mb-4">
-      <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
-      <input id="teacher-email-input" type="email" placeholder="teacher@school.edu"
-        class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
-    </div>
-    <div class="flex justify-end gap-2">
+    ${bodyHtml}
+    <div class="flex justify-end gap-2 mt-4">
       <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white btn-primary rounded-lg transition flex items-center gap-2 focus-ring">
-        <span>Add teacher</span>
-      </button>
-    </div>
-  `);
+      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white rounded-lg transition focus-ring ${submitClass || 'btn-primary'}">${submitLabel}</button>
+    </div>`;
+}
+function wireModalButtons(onSubmit) {
   document.getElementById('modal-close').addEventListener('click', closeModal);
   document.getElementById('modal-cancel').addEventListener('click', closeModal);
-  document.getElementById('modal-submit').addEventListener('click', async () => {
+  document.getElementById('modal-submit').addEventListener('click', onSubmit);
+}
+
+function openCreateCourseModal() {
+  openModal(modalShell('New classroom', `
+    <div class="space-y-3">
+      <div><label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Name</label>
+        <input id="cc-name" type="text" placeholder="e.g. AP Biology" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Section</label>
+          <input id="cc-section" type="text" placeholder="Period 3" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></div>
+        <div><label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Room</label>
+          <input id="cc-room" type="text" placeholder="Rm 204" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></div>
+      </div>
+      <div><label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Owner (primary teacher) email</label>
+        <input id="cc-owner" type="email" placeholder="teacher@school.edu" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring"></div>
+      <p class="text-xs text-[var(--ink-faint)]">New courses are created in "Provisioned" state; the owning teacher must accept the invite in Classroom before it becomes Active (this is a Google Classroom API requirement, not a limitation of this tool).</p>
+    </div>
+  `, 'Create'), 'Cancel');
+  wireModalButtons(async () => {
+    const name = document.getElementById('cc-name').value.trim();
+    if (!name) { document.getElementById('cc-name').focus(); return; }
+    const btn = document.getElementById('modal-submit');
+    setButtonLoading(btn, 'Creating…');
+    try {
+      await apiPost({
+        action: 'createCourse', name,
+        section: document.getElementById('cc-section').value.trim(),
+        room: document.getElementById('cc-room').value.trim(),
+        ownerEmail: document.getElementById('cc-owner').value.trim() || undefined,
+      });
+      showToast(`Classroom "${name}" created.`, 'success');
+      closeModal();
+      fetchCourses(true);
+    } catch (err) {
+      showToast(err.message || 'Failed to create classroom', 'error');
+      resetButtonLoading(btn, 'Create');
+    }
+  });
+}
+
+function openAddTeacherModal() {
+  openModal(modalShell('Assign teacher', `
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Add a co-teacher to course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
+    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Teacher email</label>
+    <div class="relative">
+      <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
+      <input id="teacher-email-input" type="email" placeholder="teacher@school.edu" class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
+    </div>
+  `, 'Add teacher'));
+  wireModalButtons(async () => {
     const input = document.getElementById('teacher-email-input');
     const email = input.value.trim();
     if (!email) { input.focus(); return; }
@@ -854,60 +935,98 @@ function openAddTeacherModal() {
   });
 }
 
-function openAddStudentModal() {
-  openModal(`
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-bold tracking-tight">Enroll student</h3>
-      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
-    </div>
-    <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll a student in course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
-    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Student email</label>
-    <div class="relative mb-4">
-      <span class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.mail}</span>
-      <input id="student-email-input" type="email" placeholder="student@school.edu"
-        class="w-full border border-[var(--line)] rounded-lg pl-9 pr-3 py-2 text-sm focus-ring">
-    </div>
-    <div class="flex justify-end gap-2">
-      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--good)] hover:opacity-90 rounded-lg transition focus-ring">Enroll student</button>
-    </div>
-  `);
-  document.getElementById('modal-close').addEventListener('click', closeModal);
-  document.getElementById('modal-cancel').addEventListener('click', closeModal);
-  document.getElementById('modal-submit').addEventListener('click', async () => {
-    const input = document.getElementById('student-email-input');
-    const email = input.value.trim();
-    if (!email) { input.focus(); return; }
+function confirmMakePrimary(email) {
+  openModal(modalShell('Make primary teacher', `
+    <p class="text-sm text-[var(--ink-soft)]">Make <span class="font-medium">${escapeHtml(email)}</span> the primary teacher (owner) of course <span class="font-medium">${escapeHtml(state.courseId)}</span>? Google Classroom requires the new owner to already be a teacher on the course, and some domains restrict ownership transfer entirely — if that's the case here you'll see an error from Google.</p>
+  `, 'Make primary'));
+  wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
-    setButtonLoading(btn, 'Enrolling…');
+    setButtonLoading(btn, 'Updating…');
     try {
-      await apiPost({ action: 'addStudent', courseId: state.courseId, studentEmail: email });
-      showToast(`${email} enrolled as a student.`, 'success');
+      await apiPost({ action: 'setPrimaryTeacher', courseId: state.courseId, teacherEmail: email });
+      showToast(`${email} is now the primary teacher.`, 'success');
       closeModal();
       fetchCourseMembers(state.courseId);
     } catch (err) {
-      showToast(err.message || 'Failed to enroll student', 'error');
-      resetButtonLoading(btn, 'Enroll student');
+      showToast(err.message || 'Failed to change primary teacher', 'error');
+      resetButtonLoading(btn, 'Make primary');
+    }
+  });
+}
+
+function openAddStudentModal() {
+  openModal(modalShell('Enroll student(s)', `
+    <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll into course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
+    <div class="flex gap-1 mb-3 p-1 bg-[var(--paper)] rounded-lg w-fit">
+      <button type="button" id="as-tab-email" class="seg-btn is-active text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By email</button>
+      <button type="button" id="as-tab-ou" class="seg-btn text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By OU</button>
+    </div>
+    <div id="as-panel-email">
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Student email(s) — one per line, or comma-separated</label>
+      <textarea id="student-emails-input" rows="4" placeholder="student1@school.edu&#10;student2@school.edu" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring font-mono"></textarea>
+    </div>
+    <div id="as-panel-ou" class="hidden">
+      <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Organizational Unit</label>
+      <select id="as-ou-select" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-white focus-ring">
+        <option value="">Select an organizational unit…</option>
+        ${state.ous.map(ou => `<option value="${escapeHtml(ou.orgUnitPath)}">${escapeHtml(ou.name || ou.orgUnitPath)}</option>`).join('')}
+      </select>
+      <p class="text-xs text-[var(--ink-faint)] mt-2">Every user in this OU will be enrolled as a student.</p>
+    </div>
+    <p id="as-hint" class="hidden text-xs text-[var(--ink-soft)] mt-3"></p>
+  `, 'Enroll', 'bg-[var(--good)] hover:opacity-90'));
+  const tabEmail = document.getElementById('as-tab-email'), tabOu = document.getElementById('as-tab-ou');
+  const panelEmail = document.getElementById('as-panel-email'), panelOu = document.getElementById('as-panel-ou');
+  let mode = 'email';
+  tabEmail.addEventListener('click', () => { mode = 'email'; tabEmail.classList.add('is-active'); tabOu.classList.remove('is-active'); panelEmail.classList.remove('hidden'); panelOu.classList.add('hidden'); });
+  tabOu.addEventListener('click', () => { mode = 'ou'; tabOu.classList.add('is-active'); tabEmail.classList.remove('is-active'); panelOu.classList.remove('hidden'); panelEmail.classList.add('hidden'); });
+
+  wireModalButtons(async () => {
+    const btn = document.getElementById('modal-submit');
+    const hint = document.getElementById('as-hint');
+    if (mode === 'email') {
+      const raw = document.getElementById('student-emails-input').value;
+      const emails = raw.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+      if (!emails.length) { showToast('Enter at least one email.', 'error'); return; }
+      setButtonLoading(btn, 'Enrolling…');
+      try {
+        const data = await apiPost({ action: 'bulkAddStudents', courseId: state.courseId, studentEmails: emails });
+        const r = data.results;
+        closeModal();
+        if (!r.failed.length) showToast(`Enrolled ${r.ok.length} student(s).`, 'success');
+        else showToast(`Enrolled ${r.ok.length}; ${r.failed.length} failed (${r.failed.map(f => f.email).join(', ')}).`, 'error');
+        fetchCourseMembers(state.courseId);
+      } catch (err) {
+        showToast(err.message || 'Failed to enroll students', 'error');
+        resetButtonLoading(btn, 'Enroll');
+      }
+    } else {
+      const orgUnitPath = document.getElementById('as-ou-select').value;
+      if (!orgUnitPath) { showToast('Select an OU first.', 'error'); return; }
+      setButtonLoading(btn, 'Enrolling…');
+      hint.textContent = 'This can take a while for large OUs…';
+      hint.classList.remove('hidden');
+      try {
+        const data = await apiPost({ action: 'bulkAddStudentsByOU', courseId: state.courseId, orgUnitPath }, 180000);
+        const r = data.results;
+        closeModal();
+        if (!r.failed.length) showToast(`Enrolled ${r.ok.length} student(s) from this OU.`, 'success');
+        else showToast(`Enrolled ${r.ok.length}; ${r.failed.length} failed (already enrolled or non-students).`, 'error');
+        fetchCourseMembers(state.courseId);
+      } catch (err) {
+        showToast(err.message || 'Failed to enroll OU', 'error');
+        resetButtonLoading(btn, 'Enroll');
+      }
     }
   });
 }
 
 function confirmRemoveMember(email, role) {
   const label = role === 'teacher' ? 'teacher' : 'student';
-  openModal(`
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-bold tracking-tight">Remove ${label}</h3>
-      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
-    </div>
-    <p class="text-sm text-[var(--ink-soft)] mb-6">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(state.courseId)}</span>? This can't be undone from here.</p>
-    <div class="flex justify-end gap-2">
-      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--bad)] hover:opacity-90 rounded-lg transition focus-ring">Remove</button>
-    </div>
-  `);
-  document.getElementById('modal-close').addEventListener('click', closeModal);
-  document.getElementById('modal-cancel').addEventListener('click', closeModal);
-  document.getElementById('modal-submit').addEventListener('click', async () => {
+  openModal(modalShell(`Remove ${label}`, `
+    <p class="text-sm text-[var(--ink-soft)]">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(state.courseId)}</span>? This can't be undone from here.</p>
+  `, 'Remove', 'bg-[var(--bad)] hover:opacity-90'));
+  wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
     setButtonLoading(btn, 'Removing…');
     try {
@@ -925,133 +1044,107 @@ function confirmRemoveMember(email, role) {
   });
 }
 
-function openEnrollSelectedModal() {
-  const emails = Array.from(state.selectedUserIds);
-  openModal(`
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-bold tracking-tight">Enroll selected students</h3>
-      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
-    </div>
-    <p class="text-sm text-[var(--ink-soft)] mb-3">${emails.length} student(s) selected. Enter the destination course ID.</p>
-    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Course ID</label>
-    <input id="bulk-course-id-input" type="text" placeholder="e.g. 123456789012"
-      class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm mb-4 focus-ring">
-    <div class="flex justify-end gap-2">
-      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--good)] hover:opacity-90 rounded-lg transition focus-ring">Enroll all</button>
-    </div>
-  `);
-  document.getElementById('modal-close').addEventListener('click', closeModal);
-  document.getElementById('modal-cancel').addEventListener('click', closeModal);
-  document.getElementById('modal-submit').addEventListener('click', async () => {
-    const courseId = document.getElementById('bulk-course-id-input').value.trim();
-    if (!courseId) return;
+function confirmBulkRemoveStudents() {
+  const emails = Array.from(state.selectedStudentIds);
+  openModal(modalShell('Remove selected students', `
+    <p class="text-sm text-[var(--ink-soft)]">Remove ${emails.length} student(s) from course <span class="font-medium">${escapeHtml(state.courseId)}</span>?</p>
+  `, 'Remove all', 'bg-[var(--bad)] hover:opacity-90'));
+  wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
-    setButtonLoading(btn, 'Enrolling…');
-    let ok = 0, fail = 0;
-    for (const email of emails) {
-      try {
-        await apiPost({ action: 'addStudent', courseId, studentEmail: email });
-        ok++;
-      } catch (err) {
-        fail++;
-      }
+    setButtonLoading(btn, 'Removing…');
+    try {
+      const data = await apiPost({ action: 'bulkRemoveStudents', courseId: state.courseId, studentEmails: emails });
+      const r = data.results;
+      closeModal();
+      if (!r.failed.length) showToast(`Removed ${r.ok.length} student(s).`, 'success');
+      else showToast(`Removed ${r.ok.length}; ${r.failed.length} failed.`, 'error');
+      state.selectedStudentIds.clear();
+      fetchCourseMembers(state.courseId);
+    } catch (err) {
+      showToast(err.message || 'Failed to remove students', 'error');
+      resetButtonLoading(btn, 'Remove all');
     }
-    closeModal();
-    if (fail === 0) showToast(`Enrolled ${ok} student(s) in course ${courseId}.`, 'success');
-    else showToast(`Enrolled ${ok} student(s); ${fail} failed. Check emails and try again.`, 'error');
   });
 }
 
 function openEnrollByOUModal() {
-  const ouOptions = state.ous.map(ou => {
-    const path = ou.orgUnitPath || ou.path || '';
-    const name = ou.name || path;
-    return `<option value="${escapeHtml(path)}">${escapeHtml(name)}</option>`;
-  }).join('');
+  // Same underlying action as the "By OU" tab in openAddStudentModal — kept as
+  // its own button/entry point on the toolbar since it's the common path.
+  openAddStudentModal();
+  document.getElementById('as-tab-ou').click();
+}
 
-  openModal(`
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-bold tracking-tight">Enroll an entire OU</h3>
-      <button id="modal-close" class="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--paper)] focus-ring">${ICONS.x}</button>
-    </div>
-    <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll every user in an organizational unit into course <span class="font-medium">${escapeHtml(state.courseId)}</span>.</p>
-    <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Organizational Unit</label>
-    <div class="relative mb-4">
-      <select id="enroll-ou-select" class="w-full appearance-none border border-[var(--line)] rounded-lg pl-3 pr-9 py-2 text-sm bg-white focus-ring">
-        <option value="">Select an organizational unit…</option>
-        ${ouOptions}
-      </select>
-      <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-faint)]">${ICONS.chevronDown}</div>
-    </div>
-    <p id="enroll-ou-hint" class="hidden text-xs text-[var(--ink-soft)] mb-4"></p>
-    <div class="flex justify-end gap-2">
-      <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-[var(--ink-soft)] hover:bg-[var(--paper)] rounded-lg transition focus-ring">Cancel</button>
-      <button id="modal-submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--good)] hover:opacity-90 rounded-lg transition focus-ring">Enroll OU</button>
-    </div>
-  `);
-  document.getElementById('modal-close').addEventListener('click', closeModal);
-  document.getElementById('modal-cancel').addEventListener('click', closeModal);
-  document.getElementById('modal-submit').addEventListener('click', async () => {
-    const select = document.getElementById('enroll-ou-select');
-    const orgUnitPath = select.value;
-    if (!orgUnitPath) { select.focus(); return; }
+function confirmBulkCourseOp(action, label, verb) {
+  const ids = Array.from(state.selectedCourseIds);
+  openModal(modalShell(label, `
+    <p class="text-sm text-[var(--ink-soft)]">${verb} ${ids.length} classroom(s)? ${action === 'bulkDeleteCourses' ? 'Deleted classrooms cannot be recovered from this tool.' : ''}</p>
+  `, label, action === 'bulkDeleteCourses' ? 'bg-[var(--bad)] hover:opacity-90' : 'bg-[var(--warn)] hover:opacity-90'));
+  wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
-    const hint = document.getElementById('enroll-ou-hint');
-    setButtonLoading(btn, 'Fetching roster…');
+    setButtonLoading(btn, 'Working…');
     try {
-      const data = await apiGet({ action: 'getUsersByOU', orgUnitPath });
-      const users = data.users || [];
-      if (!users.length) {
-        showToast('This OU has no users to enroll.', 'error');
-        resetButtonLoading(btn, 'Enroll OU');
-        return;
-      }
-      hint.textContent = `Enrolling 0 of ${users.length}…`;
-      hint.classList.remove('hidden');
-      let ok = 0, fail = 0;
-      for (let i = 0; i < users.length; i++) {
-        const email = getUserEmail(users[i]);
-        setButtonLoading(btn, `Enrolling ${i + 1}/${users.length}…`);
-        hint.textContent = `Enrolling ${i + 1} of ${users.length}…`;
-        try {
-          await apiPost({ action: 'addStudent', courseId: state.courseId, studentEmail: email });
-          ok++;
-        } catch (err) {
-          fail++;
-        }
-      }
+      const data = await apiPost({ action, courseIds: ids }, 120000);
+      const r = data.results;
       closeModal();
-      if (fail === 0) showToast(`Enrolled all ${ok} student(s) from this OU.`, 'success');
-      else showToast(`Enrolled ${ok} student(s); ${fail} failed (likely already enrolled or non-students).`, 'error');
-      fetchCourseMembers(state.courseId);
+      if (!r.failed.length) showToast(`${label} succeeded for ${r.ok.length} classroom(s).`, 'success');
+      else showToast(`${r.ok.length} succeeded; ${r.failed.length} failed.`, 'error');
+      state.selectedCourseIds.clear();
+      fetchCourses(true);
     } catch (err) {
-      showToast(err.message || 'Failed to load OU roster', 'error');
-      resetButtonLoading(btn, 'Enroll OU');
+      showToast(err.message || 'Bulk action failed', 'error');
+      resetButtonLoading(btn, label);
     }
   });
 }
 
 function setButtonLoading(btn, label) {
   btn.disabled = true;
-  btn.dataset.original = btn.innerHTML;
   btn.innerHTML = `<span class="w-4 h-4 animate-spin inline-block align-[-3px]">${ICONS.spinner}</span> ${label}`;
 }
-function resetButtonLoading(btn, label) {
-  btn.disabled = false;
-  btn.innerHTML = label;
+function resetButtonLoading(btn, label) { btn.disabled = false; btn.innerHTML = label; }
+
+/* ============================================================
+   EXPORTS
+   ============================================================ */
+async function exportGrades() {
+  if (!state.courseId) return;
+  const btn = document.getElementById('btn-export-grades');
+  setButtonLoading(btn, 'Exporting…');
+  try {
+    const data = await apiGet({ action: 'exportGrades', courseId: state.courseId }, 120000);
+    downloadText(data.filename, data.csv);
+    showToast('Grades exported.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Failed to export grades', 'error');
+  } finally {
+    resetButtonLoading(btn, `<span class="w-3.5 h-3.5 inline-block align-[-3px] mr-1">${ICONS.download}</span>Export grades`);
+    icon(document.getElementById('icon-export-grades'), 'download');
+  }
+}
+async function exportTopics() {
+  if (!state.courseId) return;
+  const btn = document.getElementById('btn-export-topics');
+  setButtonLoading(btn, 'Exporting…');
+  try {
+    const data = await apiGet({ action: 'exportTopicsAndAssignments', courseId: state.courseId }, 120000);
+    downloadText(data.filename, data.csv);
+    showToast('Topics & assignments exported.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Failed to export', 'error');
+  } finally {
+    resetButtonLoading(btn, `<span class="w-3.5 h-3.5 inline-block align-[-3px] mr-1">${ICONS.download}</span>Export topics & assignments`);
+    icon(document.getElementById('icon-export-topics'), 'download');
+  }
 }
 
 /* ============================================================
    WIRE UP
    ============================================================ */
-function init() {
-  // header icons
+function boot() {
   icon(document.getElementById('icon-logo'), 'logo');
   icon(document.getElementById('icon-logo-mobile'), 'logo');
   icon(document.getElementById('nav-icon-ou'), 'users');
   icon(document.getElementById('nav-icon-classroom'), 'book');
-
   icon(document.getElementById('ou-chevron'), 'chevronDown');
   icon(document.getElementById('icon-refresh-ous'), 'refresh');
   icon(document.getElementById('icon-search'), 'search');
@@ -1060,6 +1153,9 @@ function init() {
   icon(document.getElementById('icon-spinner-users'), 'spinner');
   icon(document.getElementById('icon-add-teacher'), 'plus');
   icon(document.getElementById('icon-add-student'), 'plus');
+  icon(document.getElementById('icon-create-course'), 'plus');
+  icon(document.getElementById('icon-export-grades'), 'download');
+  icon(document.getElementById('icon-export-topics'), 'download');
   icon(document.getElementById('icon-teachers-header'), 'user');
   icon(document.getElementById('icon-students-header'), 'users');
   icon(document.getElementById('icon-spinner-teachers'), 'spinner');
@@ -1069,65 +1165,83 @@ function init() {
   icon(document.getElementById('icon-refresh-courses'), 'refresh');
   icon(document.getElementById('icon-spinner-courses'), 'spinner');
   icon(document.getElementById('icon-enroll-ou'), 'building');
+  icon(document.getElementById('icon-logo-login'), 'logo');
 
   setActiveTab('ou');
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
-  });
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
 
-  // Tab 1 events
+  document.getElementById('btn-sign-out').addEventListener('click', signOut);
+  document.getElementById('btn-sign-out-mobile').addEventListener('click', signOut);
+
+  // Tab 1
   document.getElementById('ou-select').addEventListener('change', (e) => {
     state.selectedOU = e.target.value;
     if (state.selectedOU) fetchUsersByOU(state.selectedOU);
     else { state.users = []; state.filteredUsers = []; renderUserTable(); document.getElementById('user-search').disabled = true; }
   });
   document.getElementById('btn-refresh-ous').addEventListener('click', fetchOUs);
-  document.getElementById('user-search').addEventListener('input', (e) => {
-    state.searchQuery = e.target.value;
-    applyUserFilter();
-  });
+  document.getElementById('user-search').addEventListener('input', (e) => { state.searchQuery = e.target.value; applyUserFilter(); });
   document.getElementById('select-all').addEventListener('change', (e) => {
     const emails = state.filteredUsers.map(getUserEmail);
-    if (e.target.checked) emails.forEach(em => state.selectedUserIds.add(em));
-    else emails.forEach(em => state.selectedUserIds.delete(em));
-    renderUserTable();
-    updateSelectionBar();
+    if (e.target.checked) emails.forEach(em => state.selectedUserIds.add(em)); else emails.forEach(em => state.selectedUserIds.delete(em));
+    renderUserTable(); updateSelectionBar();
   });
-  document.getElementById('btn-clear-selection').addEventListener('click', () => {
-    state.selectedUserIds.clear();
-    renderUserTable();
-    updateSelectionBar();
+  document.getElementById('btn-clear-selection').addEventListener('click', () => { state.selectedUserIds.clear(); renderUserTable(); updateSelectionBar(); });
+  document.getElementById('btn-enroll-selected').addEventListener('click', () => {
+    // Reuses the course-scoped bulkAddStudents endpoint by prompting for a course ID first.
+    openModal(modalShell('Enroll selected students', `
+      <p class="text-sm text-[var(--ink-soft)] mb-3">${state.selectedUserIds.size} student(s) selected. Enter the destination course ID.</p>
+      <input id="bulk-course-id-input" type="text" placeholder="e.g. 123456789012" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+    `, 'Enroll all', 'bg-[var(--good)] hover:opacity-90'));
+    wireModalButtons(async () => {
+      const courseId = document.getElementById('bulk-course-id-input').value.trim();
+      if (!courseId) return;
+      const btn = document.getElementById('modal-submit');
+      setButtonLoading(btn, 'Enrolling…');
+      try {
+        const data = await apiPost({ action: 'bulkAddStudents', courseId, studentEmails: Array.from(state.selectedUserIds) });
+        const r = data.results;
+        closeModal();
+        if (!r.failed.length) showToast(`Enrolled ${r.ok.length} student(s) in course ${courseId}.`, 'success');
+        else showToast(`Enrolled ${r.ok.length}; ${r.failed.length} failed.`, 'error');
+      } catch (err) {
+        showToast(err.message || 'Failed to enroll students', 'error');
+        resetButtonLoading(btn, 'Enroll all');
+      }
+    });
   });
-  document.getElementById('btn-enroll-selected').addEventListener('click', openEnrollSelectedModal);
 
-  // Tab 2 events
+  // Tab 2
   document.getElementById('btn-load-course').addEventListener('click', () => {
     const id = document.getElementById('course-id-input').value.trim();
     if (!id) { showToast('Enter a course ID first.', 'error'); return; }
     state.courseId = id;
     fetchCourseMembers(id);
   });
-  document.getElementById('course-id-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') document.getElementById('btn-load-course').click();
-  });
+  document.getElementById('course-id-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('btn-load-course').click(); });
+  document.getElementById('btn-open-create-course').addEventListener('click', openCreateCourseModal);
   document.getElementById('btn-open-add-teacher').addEventListener('click', openAddTeacherModal);
   document.getElementById('btn-open-add-student').addEventListener('click', openAddStudentModal);
   document.getElementById('btn-open-enroll-ou').addEventListener('click', openEnrollByOUModal);
-  document.getElementById('course-search').addEventListener('input', (e) => {
-    state.courseSearchQuery = e.target.value;
-    applyCourseFilter();
-  });
-  document.getElementById('filter-orphaned').addEventListener('change', (e) => {
-    state.onlyOrphaned = e.target.checked;
-    applyCourseFilter();
-  });
+  document.getElementById('btn-export-grades').addEventListener('click', exportGrades);
+  document.getElementById('btn-export-topics').addEventListener('click', exportTopics);
+  document.getElementById('course-search').addEventListener('input', (e) => { state.courseSearchQuery = e.target.value; applyCourseFilter(); });
+  document.getElementById('filter-orphaned').addEventListener('change', (e) => { state.onlyOrphaned = e.target.checked; applyCourseFilter(); });
   document.getElementById('btn-refresh-courses').addEventListener('click', () => fetchCourses(true));
+  document.getElementById('btn-bulk-archive').addEventListener('click', () => confirmBulkCourseOp('bulkArchiveCourses', 'Archive', 'Archive'));
+  document.getElementById('btn-bulk-delete').addEventListener('click', () => confirmBulkCourseOp('bulkDeleteCourses', 'Delete', 'Permanently delete'));
+  document.getElementById('btn-course-clear-selection').addEventListener('click', () => { state.selectedCourseIds.clear(); renderCourses(); });
+  document.getElementById('btn-select-all-students').addEventListener('click', () => {
+    state.students.forEach(s => state.selectedStudentIds.add(getMemberEmail(s)));
+    renderMembers();
+  });
+  document.getElementById('btn-bulk-remove-students').addEventListener('click', confirmBulkRemoveStudents);
 
   fetchOUs();
   fetchCourses();
 }
 
-document.addEventListener('DOMContentLoaded', init);
+window.addEventListener('load', initSignIn);
 </script>
 </body>
 </html>
