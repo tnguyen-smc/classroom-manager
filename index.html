@@ -80,6 +80,16 @@
   .text-\[\.65rem\]{ line-height:1.35 !important; }
   .text-\[\.68rem\]{ line-height:1.35 !important; }
   .text-\[\.72rem\]{ line-height:1.35 !important; }
+  /* Explicit leading-* utilities express real intent (tightly-stacked
+     title/subtitle pairs, etc.) and must win over the blanket text-size
+     overrides above — otherwise something like "leading-none" on a header
+     title gets silently pried back open to 1.4 line-height. Redeclared
+     here, after the text-size rules, so the (equal-specificity, both
+     !important) tie resolves in their favor. */
+  .leading-none{ line-height:1 !important; }
+  .leading-tight{ line-height:1.15 !important; }
+  .leading-snug{ line-height:1.25 !important; }
+  .leading-relaxed{ line-height:1.5 !important; }
   ::-webkit-scrollbar{ width:10px; height:10px; }
   ::-webkit-scrollbar-track{ background:transparent; }
   ::-webkit-scrollbar-thumb{ background:rgba(24,42,32,.16); border-radius:10px; border:3px solid transparent; background-clip:content-box; }
@@ -144,16 +154,24 @@
   #app-header img.hdr-logo{ height:30px; width:auto; display:block; object-fit:contain; }
   #icon-rail{
     position:fixed; top:var(--header-h); left:0; bottom:0; width:var(--rail-w); z-index:50;
-    background:var(--panel); border-right:1px solid var(--line); box-shadow:2px 0 12px rgba(24,42,32,.05);
+    background:rgba(255,255,255,.6); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border-right:1px solid var(--line); box-shadow:2px 0 12px rgba(24,42,32,.05);
     display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:4px;
   }
   .rail-btn{
     width:64px; height:56px; border-radius:12px; display:flex; align-items:center; justify-content:center;
-    color:#000; transition:all .15s; flex-direction:column; gap:3px;
+    color:var(--ink-soft); transition:all .15s; flex-direction:column; gap:3px;
+    background:transparent; border:1px solid transparent;
   }
   .rail-btn span.rail-label{ font-size:.6rem; font-weight:600; letter-spacing:.01em; line-height:1; }
-  .rail-btn:hover{ background:var(--panel-2); color:#000; }
-  .rail-btn.is-active{ background:var(--accent-tint); color:var(--accent); }
+  .rail-btn:hover{
+    background:rgba(255,255,255,.7); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border-color:rgba(224,237,228,.9); color:var(--ink);
+  }
+  .rail-btn.is-active{
+    background:rgba(44,161,95,.14); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border-color:rgba(44,161,95,.24); color:var(--accent-ink);
+  }
   #app-content{ margin-left:var(--rail-w); padding-top:var(--header-h); min-height:100vh; }
   @media (max-width: 768px){
     :root{ --rail-w:64px; }
@@ -187,12 +205,17 @@
   #login-screen{ background:var(--bg) !important; }
 
   /* ---- Manage Classrooms: drawer + split workspace ---- */
-  /* Negative margin pulls the drawer flush against the fixed icon rail, so
-     it reads as an extension of the rail rather than a separate floating
-     panel — "attached" rather than a gap + rounded corners on all sides. */
+  /* Negative margins pull the shell flush against the fixed icon rail and
+     up under the header, so the drawer reads as an extension of the rail
+     itself and gets the full available height rather than losing space to
+     a separate title row above it. The "Manage Classrooms" heading instead
+     floats as an overlay inside the workspace panel (see
+     #classrooms-floating-headline below). */
   #classrooms-shell{
-    display:flex; align-items:stretch; gap:16px; margin-left:-24px;
-    height:calc(100vh - var(--header-h) - 148px); min-height:420px;
+    display:flex; align-items:stretch; gap:16px;
+    margin:-20px -24px 0 -24px;
+    height:calc(100vh - var(--header-h) - 84px); min-height:420px;
+    position:relative;
   }
   #classroom-drawer{
     width:300px; flex-shrink:0; background:var(--panel); border:1px solid var(--line); border-left:none;
@@ -201,11 +224,25 @@
     transition:width .18s ease, opacity .18s ease;
   }
   #classroom-drawer.collapsed{ width:0; border:0; opacity:0; overflow:hidden; margin-right:-16px; }
-  #classroom-workspace{ flex:1; min-width:0; height:100%; overflow-y:auto; padding-right:2px; }
-  #drawer-toggle{
-    width:28px; height:28px; border-radius:8px; border:1px solid var(--line); color:var(--ink-soft);
-    display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--panel-2);
+  #classroom-workspace{ flex:1; min-width:0; height:100%; overflow-y:auto; padding-right:2px; position:relative; }
+  /* Floating heading — sits inside the workspace panel's top-left corner
+     instead of taking up its own row above the whole shell. */
+  #classrooms-floating-headline{
+    position:absolute; top:0; left:0; z-index:6; pointer-events:none;
   }
+  #classrooms-floating-headline > *{ pointer-events:auto; }
+  .workspace-top-spacer{ height:52px; }
+  /* Drawer collapse toggle — a small tab sitting on the seam between the
+     drawer and the workspace, like a sidebar collapse handle, so its
+     location makes sense relative to the thing it's toggling rather than
+     floating in an unrelated title bar. */
+  #drawer-toggle{
+    position:absolute; top:16px; left:284px; z-index:7;
+    width:26px; height:26px; border-radius:999px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    transition:left .18s ease;
+  }
+  #classrooms-shell.drawer-collapsed #drawer-toggle{ left:0; }
   .drawer-filter-tab{ font-size:.72rem; padding:5px 8px; border-radius:999px; color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); white-space:nowrap; }
   .drawer-filter-tab.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); font-weight:600; }
   .drawer-list-wrap{ flex:1 1 auto; min-height:0; overflow-y:auto; }
@@ -422,16 +459,6 @@
              VIEW 3: MANAGE CLASSROOMS (drawer + split workspace)
              ============================================================ -->
         <section id="view-classrooms" class="hidden">
-          <div class="flex items-center gap-2 mb-3 flex-wrap">
-            <div class="view-headline mb-0"><h1>Manage Classrooms</h1></div>
-            <button id="drawer-toggle" title="Toggle classroom list" class="btn-icon-neutral ml-1 focus-ring">
-              <span class="w-3.5 h-3.5" id="icon-drawer-toggle"></span>
-            </button>
-            <button id="btn-open-create-course" class="btn-ghost role-write ml-auto h-9 px-4 rounded-lg text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-1.5 focus-ring">
-              <span class="w-3.5 h-3.5" id="icon-create-course"></span> New classroom
-            </button>
-          </div>
-
           <div id="classrooms-shell">
             <!-- Collapsible left drawer — visually attached to the icon rail -->
             <aside id="classroom-drawer">
@@ -443,6 +470,9 @@
                   </div>
                   <button id="btn-refresh-drawer" title="Refresh classrooms" class="btn-icon-neutral h-8 w-8 flex items-center justify-center rounded-lg shrink-0 focus-ring">
                     <span class="w-4 h-4 block" id="icon-refresh-courses"></span>
+                  </button>
+                  <button id="btn-open-create-course" title="New classroom" class="btn-icon-tint role-write h-8 w-8 flex items-center justify-center rounded-lg shrink-0 focus-ring">
+                    <span class="w-4 h-4 block" id="icon-create-course"></span>
                   </button>
                 </div>
                 <div class="relative">
@@ -478,8 +508,17 @@
               </div>
             </aside>
 
+            <!-- Collapse toggle — sits on the seam between the drawer and
+                 the workspace it controls, instead of an unrelated title bar -->
+            <button id="drawer-toggle" title="Toggle classroom list" class="btn-icon-neutral focus-ring">
+              <span class="w-3.5 h-3.5" id="icon-drawer-toggle"></span>
+            </button>
+
             <!-- Main workspace -->
             <div id="classroom-workspace">
+              <div id="classrooms-floating-headline" class="view-headline mb-0"><h1>Manage Classrooms</h1></div>
+              <div class="workspace-top-spacer"></div>
+
               <div id="workspace-empty" class="surface p-10 text-center text-sm text-[var(--ink-faint)]">
                 Select a classroom from the list to open its workspace.
               </div>
@@ -649,7 +688,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbz97X9Fgw-xHX0CN-eAKUEN9n_qFlHNv6XFkeWPPvuOudcoOVojWFtbjl8jg8qeMX5W/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzQufCn8AE3g-eCanfYjlNPJq9WbcLT29zWLTAzGurYDXJgiF8LkC4tA2ywb0tUaXth/exec";
 const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
@@ -1881,6 +1920,7 @@ function boot() {
   document.getElementById('drawer-toggle').addEventListener('click', () => {
     state.drawerCollapsed = !state.drawerCollapsed;
     document.getElementById('classroom-drawer').classList.toggle('collapsed', state.drawerCollapsed);
+    document.getElementById('classrooms-shell').classList.toggle('drawer-collapsed', state.drawerCollapsed);
     icon(document.getElementById('icon-drawer-toggle'), state.drawerCollapsed ? 'chevronRight' : 'chevronLeft');
   });
   showWorkspaceEmpty();
