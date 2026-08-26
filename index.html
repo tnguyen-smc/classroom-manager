@@ -310,13 +310,18 @@
   #workspace-split{ display:grid; grid-template-columns:1fr; gap:16px; }
   @media (min-width:900px){ #workspace-split{ grid-template-columns:1fr 1fr; } }
 
-  /* ---- Yellow "transparent" headline strip used at the top of each view ---- */
+  /* ---- View headline: bigger solid-green title with a short yellow
+     underline accent, instead of a yellow badge/box around it. ---- */
   .view-headline{
-    background:var(--yellow-tint); border:1px solid rgba(255,194,0,.4); border-radius:12px;
-    padding:8px 14px; margin-bottom:16px; display:inline-block; max-width:100%;
+    background:transparent; border:none; padding:0;
+    margin-bottom:16px; display:block; max-width:100%;
   }
-  .view-headline h1{ font-size:1.05rem; font-weight:800; letter-spacing:-.01em; color:var(--ink); line-height:1.15; margin:0; }
-  .view-headline p{ font-size:.8rem; color:var(--ink-soft); line-height:1.2; margin:2px 0 0; }
+  .view-headline h1{
+    font-size:1.55rem; font-weight:800; letter-spacing:-.01em; color:var(--accent-ink);
+    line-height:1.2; margin:0; display:inline-block;
+    padding-bottom:5px; border-bottom:3px solid var(--yellow);
+  }
+  .view-headline p{ font-size:.82rem; color:var(--ink-soft); line-height:1.3; margin:6px 0 0; }
 
   /* ---- Classroom workspace title card ---- */
   #workspace-title-card{
@@ -496,7 +501,7 @@
                       <th class="px-4 py-3 w-10"><input type="checkbox" id="select-all" class="rounded border-[var(--line)]"></th>
                       <th class="px-4 py-3">Name</th>
                       <th class="px-4 py-3">Email</th>
-                      <th class="px-4 py-3">OU Path</th>
+                      <th class="px-4 py-3">Class Group</th>
                       <th class="px-4 py-3">Status</th>
                     </tr>
                   </thead>
@@ -624,7 +629,7 @@
                         <span class="text-xs text-[var(--accent-ink)] font-medium"><span id="student-selected-count">0</span> selected</span>
                         <button id="btn-bulk-remove-students" class="btn-chip btn-chip-bad role-write ml-auto focus-ring">Remove selected</button>
                       </div>
-                      <ul id="students-list" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-1.5 p-2 content-start max-h-[26rem] overflow-y-auto">
+                      <ul id="students-list" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-2 content-start max-h-[26rem] overflow-y-auto">
                         <li class="col-span-full px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its students.</li>
                       </ul>
                     </div>
@@ -742,7 +747,7 @@
 /* ============================================================
    CONFIG
    ============================================================ */
-const API_URL = "https://script.google.com/macros/s/AKfycbzQufCn8AE3g-eCanfYjlNPJq9WbcLT29zWLTAzGurYDXJgiF8LkC4tA2ywb0tUaXth/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycby5TMIPEPA5C1FSGPAIVmg6c9mTFxDAnF1d4U0V4g6tArap2KT7Sa7zdinga-w32_1r/exec";
 const GIS_CLIENT_ID = "387565868815-fueq4d8p6iovkpmomn3v31k2ne1knjkt.apps.googleusercontent.com"; // OAuth Client ID (Web application) from Google Cloud Console
 
 /* ============================================================
@@ -846,6 +851,10 @@ function getCourseName(c) { return c?.name || c?.courseName || getCourseId(c); }
 function getCourseSection(c) { return c?.section || c?.descriptionHeading || ''; }
 function isOwnerInactive(c) { return c?.ownerInactive === true; }
 function getOwnerEmail(c) { return c?.ownerEmail || c?.teacherEmail || ''; }
+function getClassGroupLabel(orgUnitPath) {
+  const m = state.ouMappings.find(x => x.orgUnitPath === orgUnitPath);
+  return m ? m.label : orgUnitPath;
+}
 function formatShortDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -1182,7 +1191,7 @@ function renderUserTable() {
           <span class="w-7 h-7 rounded-full bg-[var(--accent-tint)] text-[var(--accent-ink)] text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
           <span class="font-medium">${escapeHtml(name)}</span></div></td>
         <td class="px-4 py-3 text-[var(--ink-soft)] font-mono text-xs">${escapeHtml(email)}</td>
-        <td class="px-4 py-3 text-[var(--ink-faint)] font-mono text-xs">${escapeHtml(ouPath)}</td>
+        <td class="px-4 py-3 text-[var(--ink-faint)] text-xs" title="${escapeHtml(ouPath)}">${escapeHtml(getClassGroupLabel(ouPath))}</td>
         <td class="px-4 py-3"><span class="text-xs font-medium rounded-full px-2 py-0.5 ${active ? 'bg-[var(--good-tint)] text-[var(--good)]' : 'bg-[var(--bad-tint)] text-[var(--bad)]'}">${active ? 'Active' : 'Suspended'}</span></td>
       </tr>`;
   }).join('');
@@ -1684,20 +1693,36 @@ function openAddStudentModal() {
   tabStudent.addEventListener('click', () => { mode = 'student'; tabStudent.classList.add('is-active'); tabGroup.classList.remove('is-active'); panelStudent.classList.remove('hidden'); panelGroup.classList.add('hidden'); });
   tabGroup.addEventListener('click', () => { mode = 'group'; tabGroup.classList.add('is-active'); tabStudent.classList.remove('is-active'); panelGroup.classList.remove('hidden'); panelStudent.classList.add('hidden'); });
 
-  // Search over whatever roster is already in memory (OU tab fetches). Runs
-  // only when the Search button is clicked (or Enter is pressed) — not on
-  // every keystroke — and surfaces a clear "no results" message on a miss.
+  // Searches the full org directory server-side (see searchUsers in
+  // Code.gs) rather than whatever happens to already be in state.users —
+  // that was previously scoped to whichever single OU the Roster tab last
+  // loaded, so anyone outside it just never matched.
   icon(document.getElementById('icon-as-search'), 'search');
   const searchInput = document.getElementById('as-student-search');
   const searchBtn = document.getElementById('as-student-search-btn');
   const suggestBox = document.getElementById('as-student-suggestions');
   const noResults = document.getElementById('as-student-no-results');
   const emailsBox = document.getElementById('student-emails-input');
-  function runStudentSearch() {
-    const q = searchInput.value.trim().toLowerCase();
+  async function runStudentSearch() {
+    const q = searchInput.value.trim();
     noResults.classList.add('hidden');
     if (!q) { suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; return; }
-    const matches = state.users.filter(u => getUserName(u).toLowerCase().includes(q) || getUserEmail(u).toLowerCase().includes(q)).slice(0, 20);
+    setButtonLoading(searchBtn, 'Searching…');
+    function resetSearchBtn() {
+      searchBtn.disabled = false;
+      searchBtn.innerHTML = `<span class="w-3.5 h-3.5" id="icon-as-search"></span> Search`;
+      icon(document.getElementById('icon-as-search'), 'search');
+    }
+    let matches = [];
+    try {
+      const data = await apiGet({ action: 'searchUsers', q });
+      matches = data.users || [];
+    } catch (err) {
+      resetSearchBtn();
+      showToast(err.message || 'Search failed', 'error');
+      return;
+    }
+    resetSearchBtn();
     if (!matches.length) {
       suggestBox.classList.add('hidden'); suggestBox.innerHTML = '';
       noResults.classList.remove('hidden');
@@ -1849,14 +1874,28 @@ async function exportTopics() {
    VIEW: SETTINGS
    ============================================================ */
 async function loadSettingsData() {
-  const [mappingsData, settingsData, usersData] = await Promise.all([
-    apiGetOptional({ action: 'getOuMappings' }),
-    apiGetOptional({ action: 'getAppSettings' }),
-    apiGetOptional({ action: 'getAppUsers' }),
-  ]);
-  if (mappingsData) state.ouMappings = mappingsData.mappings || [];
-  if (settingsData) state.appSettings = { staffOU: settingsData.staffOU || '', studentParentOU: settingsData.studentParentOU || '' };
-  if (usersData) state.appUsers = usersData.users || [];
+  // Independent try/catches instead of one Promise.all: getAppSettings and
+  // getAppUsers are admin-only on the backend, so a permission error there
+  // for a dept_head/auditor account is normal (this runs for every role at
+  // boot, not just when the admin-only Settings view is open) and
+  // shouldn't be reported as a failure. getOuMappings, on the other hand,
+  // is readable by every role — any failure there is real and worth
+  // surfacing, instead of silently resetting to an empty list (which
+  // previously looked identical to "nothing was ever saved").
+  try {
+    const mappingsData = await apiGet({ action: 'getOuMappings' });
+    state.ouMappings = mappingsData.mappings || [];
+  } catch (err) {
+    showToast('Failed to load Class Group renamings: ' + (err.message || 'unknown error'), 'error');
+  }
+  try {
+    const settingsData = await apiGet({ action: 'getAppSettings' });
+    state.appSettings = { staffOU: settingsData.staffOU || '', studentParentOU: settingsData.studentParentOU || '' };
+  } catch (err) { /* expected for non-admin roles */ }
+  try {
+    const usersData = await apiGet({ action: 'getAppUsers' });
+    state.appUsers = usersData.users || [];
+  } catch (err) { /* expected for non-admin roles */ }
   renderSettingsView();
 }
 function renderSettingsView() {
