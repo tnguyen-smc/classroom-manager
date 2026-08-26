@@ -59,7 +59,7 @@
     background:linear-gradient(160deg, #f3fcf6 0%, #e0f5e7 40%, #c7ecd4 75%, #aee0c1 100%);
     background-attachment:fixed;
   }
-  h1,h2,h3,p{ line-height:1.25; }
+  h1,h2,h3,p{ line-height:1.25; margin:0; }
   .font-mono{ font-family:'Roboto Mono', ui-monospace, monospace; }
   /* Remove bullet markers from every list in the app — plain UL/OL are used
      purely as row containers (courses, students, teachers, mappings, etc.),
@@ -102,7 +102,7 @@
   [v-cloak]{ display:none; }
   .surface{ background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--card-shadow); }
   .pill-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
-  .pill-btn.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); }
+  .pill-btn.is-active{ background:var(--accent); color:#fff; border-color:var(--accent); }
   .focus-ring:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 
   /* ---- Translucent / frosted button system ----
@@ -112,7 +112,7 @@
      tint + blur) that both sit on top of the soft green page gradient. */
   .btn-primary{
     background:rgba(44,161,95,.88); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-    border:1px solid rgba(255,255,255,.35); color:#08150e; font-weight:600;
+    border:1px solid rgba(255,255,255,.35); color:#fff; font-weight:600;
     box-shadow:0 1px 2px rgba(24,42,32,.06), 0 6px 16px rgba(44,161,95,.18);
   }
   .btn-primary:hover{ background:rgba(44,161,95,.98); }
@@ -137,11 +137,64 @@
     border:1px solid rgba(224,237,228,.9); color:var(--ink-soft);
   }
   .btn-icon-neutral:hover{ background:rgba(255,255,255,.85); color:var(--ink); }
+
+  /* Modal action-button variants — same frosted treatment as everything
+     else, just tinted by intent (confirm / destructive / caution) instead
+     of a solid saturated fill with hard-to-read text on top. */
+  .btn-tint-good{
+    background:rgba(44,161,95,.85); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.3); color:#fff; font-weight:600;
+  }
+  .btn-tint-good:hover{ background:rgba(44,161,95,.96); }
+  .btn-tint-bad{
+    background:rgba(201,74,65,.85); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.3); color:#fff; font-weight:600;
+  }
+  .btn-tint-bad:hover{ background:rgba(201,74,65,.96); }
+  .btn-tint-warn{
+    background:rgba(201,122,46,.85); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.3); color:#fff; font-weight:600;
+  }
+  .btn-tint-warn:hover{ background:rgba(201,122,46,.96); }
+
+  /* Small pill "chip" buttons — for the text-style action buttons scattered
+     through toolbars and list rows (Archive, Delete, Clear, Select all,
+     Edit, etc.) that used to just be bare colored text with a hover
+     opacity change. Same frosted language as everything else, just lighter
+     weight since these sit inline in dense rows. */
+  .btn-chip{
+    display:inline-flex; align-items:center; gap:4px;
+    padding:4px 10px; border-radius:999px; font-size:.72rem; font-weight:600;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid transparent; transition:all .15s;
+  }
+  .btn-chip-accent{ background:rgba(44,161,95,.12); border-color:rgba(44,161,95,.24); color:var(--accent-ink); }
+  .btn-chip-accent:hover{ background:rgba(44,161,95,.22); }
+  .btn-chip-warn{ background:rgba(201,122,46,.12); border-color:rgba(201,122,46,.26); color:var(--warn); }
+  .btn-chip-warn:hover{ background:rgba(201,122,46,.22); }
+  .btn-chip-bad{ background:rgba(201,74,65,.12); border-color:rgba(201,74,65,.26); color:var(--bad); }
+  .btn-chip-bad:hover{ background:rgba(201,74,65,.22); }
+  .btn-chip-neutral{ background:rgba(255,255,255,.55); border-color:rgba(224,237,228,.9); color:var(--ink-soft); }
+  .btn-chip-neutral:hover{ background:rgba(255,255,255,.85); color:var(--ink); }
+
+  /* Small translucent icon buttons for row-level destructive actions
+     (trash icons in member/mapping rows) — same idea as .btn-icon-tint but
+     red-tinted, with a visible border instead of relying on hover-only
+     background to read as a button. */
+  .btn-icon-tint-bad{
+    background:rgba(201,74,65,.1); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(201,74,65,.2); color:var(--bad);
+  }
+  .btn-icon-tint-bad:hover{ background:rgba(201,74,65,.2); }
   .stat-card{ background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--card-shadow); position:relative; overflow:hidden; }
   .stat-icon-badge{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; position:absolute; top:14px; right:14px; }
   .role-hide{ display:none !important; }
-  .seg-btn{ color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); }
-  .seg-btn.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); font-weight:600; }
+  .seg-btn{
+    color:var(--ink-soft); background:rgba(255,255,255,.55); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(224,237,228,.9);
+  }
+  .seg-btn:hover{ background:rgba(255,255,255,.85); color:var(--ink); }
+  .seg-btn.is-active{ background:rgba(44,161,95,.88); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); color:#fff; border-color:rgba(255,255,255,.35); font-weight:600; }
 
   /* ---- Micro-SaaS header + icon rail ---- */
   #app-header{
@@ -195,8 +248,11 @@
   code, .font-mono{ letter-spacing:.01em; }
 
   /* modal */
-  #modal-content{ background:var(--panel) !important; border:1px solid var(--line); box-shadow:0 20px 50px rgba(24,42,32,.25); }
-  #modal-backdrop{ background:rgba(6,10,7,.66) !important; }
+  #modal-content{
+    background:rgba(255,255,255,.88) !important; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border:1px solid rgba(255,255,255,.6); box-shadow:0 20px 50px rgba(24,42,32,.25);
+  }
+  #modal-backdrop{ background:rgba(9,26,17,.42) !important; backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); }
 
   /* toasts */
   #toast-container .toast-in{ background:var(--panel) !important; color:var(--ink); }
@@ -232,19 +288,17 @@
   }
   #classrooms-floating-headline > *{ pointer-events:auto; }
   .workspace-top-spacer{ height:52px; }
-  /* Drawer collapse toggle — a small tab sitting on the seam between the
-     drawer and the workspace, like a sidebar collapse handle, so its
-     location makes sense relative to the thing it's toggling rather than
-     floating in an unrelated title bar. */
+  /* Drawer collapse toggle — anchored to the drawer's own bottom-right
+     corner, so its location is obviously tied to the panel it controls. */
   #drawer-toggle{
-    position:absolute; top:16px; left:284px; z-index:7;
-    width:26px; height:26px; border-radius:999px;
+    position:absolute; bottom:12px; left:264px; z-index:7;
+    width:28px; height:28px; border-radius:999px;
     display:flex; align-items:center; justify-content:center; flex-shrink:0;
-    transition:left .18s ease;
+    transition:left .18s ease, opacity .18s ease;
   }
-  #classrooms-shell.drawer-collapsed #drawer-toggle{ left:0; }
+  #classrooms-shell.drawer-collapsed #drawer-toggle{ left:12px; }
   .drawer-filter-tab{ font-size:.72rem; padding:5px 8px; border-radius:999px; color:var(--ink-soft); background:var(--panel-2); border:1px solid var(--line); white-space:nowrap; }
-  .drawer-filter-tab.is-active{ background:var(--accent); color:#08150e; border-color:var(--accent); font-weight:600; }
+  .drawer-filter-tab.is-active{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
   .drawer-list-wrap{ flex:1 1 auto; min-height:0; overflow-y:auto; }
   .drawer-course-item{ padding:10px 12px 10px 10px; border-bottom:1px solid var(--line); border-left:3px solid transparent; cursor:pointer; }
   .drawer-course-item:hover{ background:var(--panel-2); }
@@ -276,7 +330,8 @@
   <!-- Sign-in gate -->
   <div id="login-screen" class="fixed inset-0 z-[100] bg-[var(--paper)] flex items-center justify-center p-6">
     <div class="surface p-8 max-w-sm w-full text-center">
-      <div class="w-12 h-12 rounded-2xl bg-[var(--accent)] flex items-center justify-center text-white mx-auto mb-4">
+      <img src="classroom-manager-logo.png" alt="" class="h-14 w-auto mx-auto mb-4 object-contain" onerror="this.style.display='none'; document.getElementById('login-logo-fallback').style.display='flex';">
+      <div id="login-logo-fallback" class="w-12 h-12 rounded-2xl bg-[var(--accent)] items-center justify-center text-white mx-auto mb-4" style="display:none;">
         <span class="w-6 h-6" id="icon-logo-login"></span>
       </div>
       <h1 class="text-xl font-bold tracking-tight mb-1">Google Classroom Manager</h1>
@@ -339,7 +394,6 @@
              VIEW 1: SUMMARY (data dashboard)
              ============================================================ -->
         <section id="view-summary">
-          <p id="summary-greeting" class="text-lg font-bold tracking-tight mb-2 leading-none">Good morning!</p>
           <div class="view-headline"><h1>Summary</h1><p>System-wide snapshot across all classrooms, teachers, and students.</p></div>
           <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
             <div class="stat-card p-5">
@@ -424,7 +478,7 @@
               <button id="btn-enroll-selected" class="role-hide role-write ml-auto text-sm font-medium text-white btn-primary active:scale-[0.98] transition-all rounded-lg px-3 py-1.5 flex items-center gap-1.5 focus-ring">
                 <span class="w-3.5 h-3.5" id="icon-enroll-selected"></span> Enroll in course
               </button>
-              <button id="btn-clear-selection" class="text-sm font-medium text-[var(--accent-ink)] hover:opacity-70 px-2 py-1.5 focus-ring">Clear</button>
+              <button id="btn-clear-selection" class="btn-chip btn-chip-neutral focus-ring">Clear</button>
             </div>
           </div>
 
@@ -492,10 +546,10 @@
 
               <div id="course-bulk-bar" class="hidden flex flex-wrap items-center gap-2 bg-[var(--accent-tint)] border-b border-[var(--line)] px-3 py-2">
                 <span class="text-xs text-[var(--accent-ink)] font-medium"><span id="course-selected-count">0</span> selected</span>
-                <button id="btn-bulk-archive" class="role-write bulk-archive-btn ml-auto text-xs font-medium text-[var(--warn)] hover:opacity-70 focus-ring">Archive</button>
-                <button id="btn-bulk-unarchive" class="role-write bulk-unarchive-btn text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Unarchive</button>
-                <button id="btn-bulk-delete" class="role-write text-xs font-medium text-[var(--bad)] hover:opacity-70 focus-ring">Delete</button>
-                <button id="btn-course-clear-selection" class="text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Clear</button>
+                <button id="btn-bulk-archive" class="btn-chip btn-chip-warn role-write bulk-archive-btn ml-auto focus-ring">Archive</button>
+                <button id="btn-bulk-unarchive" class="btn-chip btn-chip-accent role-write bulk-unarchive-btn focus-ring">Unarchive</button>
+                <button id="btn-bulk-delete" class="btn-chip btn-chip-bad role-write focus-ring">Delete</button>
+                <button id="btn-course-clear-selection" class="btn-chip btn-chip-neutral focus-ring">Clear</button>
               </div>
 
               <div class="drawer-list-wrap relative">
@@ -551,7 +605,7 @@
                         <span class="w-4 h-4 text-[var(--good)]" id="icon-students-header"></span>
                         <h2 class="font-semibold">Students</h2>
                         <span id="students-count" class="text-xs font-medium bg-[var(--good-tint)] text-[var(--good)] rounded-full px-2 py-0.5">0</span>
-                        <button id="btn-select-all-students" class="role-write text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring">Select all</button>
+                        <button id="btn-select-all-students" class="btn-chip btn-chip-accent role-write focus-ring">Select all</button>
                         <button id="btn-open-add-student" class="btn-icon-tint role-write ml-auto w-7 h-7 flex items-center justify-center rounded-lg focus-ring" title="Add students">
                           <span class="w-4 h-4" id="icon-add-student"></span>
                         </button>
@@ -568,10 +622,10 @@
                       </div>
                       <div id="student-bulk-bar" class="hidden px-4 py-2 flex items-center gap-3 bg-[var(--accent-tint)] border-b border-[#bfe6cf]">
                         <span class="text-xs text-[var(--accent-ink)] font-medium"><span id="student-selected-count">0</span> selected</span>
-                        <button id="btn-bulk-remove-students" class="role-write ml-auto text-xs font-medium text-[var(--bad)] hover:opacity-70 focus-ring">Remove selected</button>
+                        <button id="btn-bulk-remove-students" class="btn-chip btn-chip-bad role-write ml-auto focus-ring">Remove selected</button>
                       </div>
-                      <ul id="students-list" class="divide-y divide-[var(--paper)] max-h-[26rem] overflow-y-auto">
-                        <li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its students.</li>
+                      <ul id="students-list" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-1.5 p-2 content-start max-h-[26rem] overflow-y-auto">
+                        <li class="col-span-full px-4 py-10 text-center text-[var(--ink-faint)] text-sm">Load a course to see its students.</li>
                       </ul>
                     </div>
                   </div>
@@ -883,12 +937,69 @@ async function apiGetOptional(params, timeoutMs = 20000) {
 /* ============================================================
    AUTH — Google Identity Services
    ============================================================ */
+// The ID token only lived in a JS variable before, so any page refresh
+// wiped it and forced a fresh sign-in even though the token itself was
+// often still valid. sessionStorage survives a refresh (but clears itself
+// when the tab closes, so it doesn't linger like localStorage would).
+const SESSION_STORAGE_KEY = 'classroomAdminSession';
+
+function decodeJwtPayload_(token) {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '==='.slice((base64.length + 3) % 4);
+    const json = decodeURIComponent(atob(padded).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    return JSON.parse(json);
+  } catch (err) { return null; }
+}
+function saveSession_(idToken) {
+  try {
+    const payload = decodeJwtPayload_(idToken);
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ idToken, exp: (payload && payload.exp) || 0 }));
+  } catch (err) { /* private browsing / storage disabled — just skip persistence */ }
+}
+function loadSession_() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return '';
+    const data = JSON.parse(raw);
+    if (!data || !data.idToken || !data.exp) return '';
+    // 30s buffer so we don't hand out a token that expires mid-request.
+    if (Date.now() >= data.exp * 1000 - 30000) { sessionStorage.removeItem(SESSION_STORAGE_KEY); return ''; }
+    return data.idToken;
+  } catch (err) { return ''; }
+}
+function clearSession_() {
+  try { sessionStorage.removeItem(SESSION_STORAGE_KEY); } catch (err) { /* ignore */ }
+}
+
 function initSignIn() {
   if (!GIS_CLIENT_ID || GIS_CLIENT_ID.indexOf('PASTE_YOUR') === 0) {
     document.getElementById('login-error').textContent = 'Set GIS_CLIENT_ID at the top of the <script> to your Google OAuth Client ID.';
     document.getElementById('login-error').classList.remove('hidden');
     return;
   }
+  const restored = loadSession_();
+  if (restored) {
+    state.idToken = restored;
+    apiGet({ action: 'whoAmI' }).then(data => {
+      state.me = { email: data.email, role: data.role, ouScope: data.ouScope };
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('app-shell').classList.remove('hidden');
+      applyRoleUI();
+      boot();
+    }).catch(() => {
+      // Stored token turned out to be invalid/expired server-side too —
+      // fall back to a normal sign-in instead of getting stuck.
+      clearSession_();
+      state.idToken = '';
+      renderGisButton_();
+    });
+    return;
+  }
+  renderGisButton_();
+}
+
+function renderGisButton_() {
   google.accounts.id.initialize({
     client_id: GIS_CLIENT_ID,
     callback: onCredential,
@@ -905,6 +1016,7 @@ async function onCredential(response) {
   try {
     const data = await apiGet({ action: 'whoAmI' });
     state.me = { email: data.email, role: data.role, ouScope: data.ouScope };
+    saveSession_(state.idToken);
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app-shell').classList.remove('hidden');
     applyRoleUI();
@@ -920,6 +1032,7 @@ async function onCredential(response) {
 function signOut() {
   state.idToken = '';
   state.me = null;
+  clearSession_();
   google.accounts.id.disableAutoSelect();
   document.getElementById('app-shell').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
@@ -956,7 +1069,7 @@ function setActiveView(view) {
    SUMMARY VIEW
    ============================================================ */
 async function loadOrgStats(forceRefresh) {
-  const data = await apiGetOptional({ action: 'getOrgStats', refresh: forceRefresh ? '1' : '0' });
+  const data = await apiGetOptional({ action: 'getOrgStats', refresh: forceRefresh ? '1' : '0' }, 45000);
   if (data) state.orgStats = data;
   renderSummaryStats();
 }
@@ -1259,7 +1372,7 @@ async function fetchCourseMembers(courseId) {
   document.getElementById('students-loading').classList.remove('hidden');
   ['btn-open-add-teacher','btn-open-add-student','btn-export-grades','btn-export-topics'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
   try {
-    const data = await apiGet({ action: 'getCourseMembers', courseId });
+    const data = await apiGet({ action: 'getCourseMembers', courseId }, 60000);
     state.teachers = data.teachers || [];
     state.students = data.students || [];
     state.selectedStudentIds.clear();
@@ -1302,7 +1415,7 @@ function renderMembers() {
   const studentsList = document.getElementById('students-list');
   const visibleStudents = filteredSortedStudents();
   studentsList.innerHTML = visibleStudents.length ? visibleStudents.map(s => memberRow(s, 'student')).join('')
-    : `<li class="px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No students match.' : 'Load a course to see its students.'}</li>`;
+    : `<li class="col-span-full px-4 py-10 text-center text-[var(--ink-faint)] text-sm">${state.courseId ? 'No students match.' : 'Load a course to see its students.'}</li>`;
 
   document.querySelectorAll('.remove-member-btn').forEach(btn => btn.addEventListener('click', () => confirmRemoveMember(btn.dataset.email, btn.dataset.role)));
   document.querySelectorAll('.make-primary-btn').forEach(btn => btn.addEventListener('click', () => confirmMakePrimary(btn.dataset.email)));
@@ -1323,18 +1436,28 @@ function updateStudentBulkBar() {
 
 function memberRow(m, role) {
   const name = getMemberName(m), email = getMemberEmail(m);
-  const accent = role === 'teacher' ? 'bg-[var(--accent-tint)] text-[var(--accent-ink)]' : 'bg-[var(--good-tint)] text-[var(--good)]';
-  const isPrimary = role === 'teacher' && m.isPrimary;
+  if (role === 'student') {
+    return `
+      <li class="flex items-center gap-1.5 pl-2 pr-1 py-1.5 rounded-lg border border-[var(--line)] bg-[var(--panel-2)]/70 min-w-0" title="${escapeHtml(email)}">
+        <input type="checkbox" class="student-checkbox role-write rounded border-[var(--line)] shrink-0 w-3.5 h-3.5" data-email="${escapeHtml(email)}" ${state.selectedStudentIds.has(email) ? 'checked' : ''}>
+        <span class="w-5 h-5 rounded-full bg-[var(--good-tint)] text-[var(--good)] text-[9px] font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
+        <p class="text-xs font-medium truncate flex-1 min-w-0">${escapeHtml(name)}</p>
+        <button class="remove-member-btn btn-icon-tint-bad role-write shrink-0 w-6 h-6 flex items-center justify-center rounded-md transition focus-ring" data-email="${escapeHtml(email)}" data-role="student" title="Remove">
+          <span class="w-3.5 h-3.5 block">${ICONS.trash}</span>
+        </button>
+      </li>`;
+  }
+  const accent = 'bg-[var(--accent-tint)] text-[var(--accent-ink)]';
+  const isPrimary = m.isPrimary;
   return `
     <li class="px-4 py-3 flex items-center gap-3">
-      ${role === 'student' ? `<input type="checkbox" class="student-checkbox role-write rounded border-[var(--line)] shrink-0" data-email="${escapeHtml(email)}" ${state.selectedStudentIds.has(email) ? 'checked' : ''}>` : ''}
       <span class="w-8 h-8 rounded-full ${accent} text-xs font-semibold flex items-center justify-center shrink-0">${escapeHtml(initials(name))}</span>
       <div class="min-w-0 flex-1">
         <p class="text-sm font-medium truncate flex items-center gap-1.5">${escapeHtml(name)} ${isPrimary ? `<span class="w-3.5 h-3.5 text-[var(--accent)]" title="Primary teacher">${ICONS.star}</span>` : ''}</p>
         <p class="text-xs text-[var(--ink-faint)] font-mono truncate">${escapeHtml(email)}</p>
       </div>
-      ${role === 'teacher' && !isPrimary ? `<button class="make-primary-btn role-admin shrink-0 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 transition focus-ring px-2" data-email="${escapeHtml(email)}" title="Make primary teacher">Make primary</button>` : ''}
-      <button class="remove-member-btn role-write shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--bad)] hover:bg-[var(--bad-tint)] transition focus-ring" data-email="${escapeHtml(email)}" data-role="${role}" title="Remove">
+      ${!isPrimary ? `<button class="make-primary-btn btn-chip btn-chip-accent role-admin shrink-0 transition focus-ring" data-email="${escapeHtml(email)}" title="Make primary teacher">Make primary</button>` : ''}
+      <button class="remove-member-btn btn-icon-tint-bad role-write shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition focus-ring" data-email="${escapeHtml(email)}" data-role="teacher" title="Remove">
         <span class="w-4 h-4 block">${ICONS.trash}</span>
       </button>
     </li>`;
@@ -1422,7 +1545,7 @@ function openBulkCreateModal() {
       <input id="bulk-file-input" type="file" accept=".csv,.xlsx,.xls" class="hidden">
     </label>
     <p id="bulk-file-name" class="text-xs text-[var(--ink-faint)] mt-2"></p>
-  `, 'Upload &amp; create', 'bg-[var(--good)] hover:opacity-90'));
+  `, 'Upload &amp; create', 'btn-tint-good'));
   const fileInput = document.getElementById('bulk-file-input');
   let picked = null;
   fileInput.addEventListener('change', () => {
@@ -1462,7 +1585,7 @@ function openAddTeacherModal() {
     ${primary ? `
       <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Primary teacher</label>
       <input type="text" value="${escapeHtml(getMemberName(primary))} · ${escapeHtml(primaryEmail)}" disabled class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm mb-3 opacity-70">
-      <button type="button" id="at-add-co" class="text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 mb-2 focus-ring">+ Add co-teacher</button>
+      <button type="button" id="at-add-co" class="btn-chip btn-chip-accent mb-2 focus-ring">+ Add co-teacher</button>
       <div id="at-co-panel" class="hidden">
         <label class="block text-xs font-semibold text-[var(--ink-soft)] mb-1">Co-teacher email</label>
         <div class="relative">
@@ -1526,7 +1649,7 @@ function confirmMakePrimary(email) {
 function openAddStudentModal() {
   openModal(modalShell('Enroll student(s)', `
     <p class="text-sm text-[var(--ink-soft)] mb-3">Enroll into course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span>.</p>
-    <div class="flex gap-1 mb-3 p-1 bg-[var(--paper)] rounded-lg w-fit">
+    <div class="flex gap-1 mb-3 p-1 rounded-lg w-fit" style="background:rgba(242,250,245,.7)">
       <button type="button" id="as-tab-student" class="seg-btn is-active text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By Student</button>
       <button type="button" id="as-tab-group" class="seg-btn text-xs font-medium rounded-md px-3 py-1.5 focus-ring">By Class Group</button>
     </div>
@@ -1553,7 +1676,7 @@ function openAddStudentModal() {
       </select>
       <p class="text-xs text-[var(--ink-faint)] mt-2">${state.ouMappings.length ? 'Every student belonging to this Class Group\u2019s OU will be enrolled.' : 'No Class Groups configured yet — add one under Settings.'}</p>
     </div>
-  `, 'Enroll', 'bg-[var(--good)] hover:opacity-90'));
+  `, 'Enroll', 'btn-tint-good'));
 
   const tabStudent = document.getElementById('as-tab-student'), tabGroup = document.getElementById('as-tab-group');
   const panelStudent = document.getElementById('as-panel-student'), panelGroup = document.getElementById('as-panel-group');
@@ -1629,7 +1752,7 @@ function openAddStudentModal() {
 
 function confirmRemoveMember(email, role) {
   const action = role === 'teacher' ? 'removeTeacher' : 'removeStudent';
-  openModal(modalShell('Remove member', `<p class="text-sm text-[var(--ink-soft)]">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span>?</p>`, 'Remove', 'bg-[var(--bad)] hover:opacity-90'));
+  openModal(modalShell('Remove member', `<p class="text-sm text-[var(--ink-soft)]">Remove <span class="font-medium">${escapeHtml(email)}</span> from course <span class="font-medium">${escapeHtml(currentCourseLabel())}</span>?</p>`, 'Remove', 'btn-tint-bad'));
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
     setButtonLoading(btn, 'Removing…');
@@ -1649,7 +1772,7 @@ function confirmRemoveMember(email, role) {
 function confirmBulkRemoveStudents() {
   const emails = Array.from(state.selectedStudentIds);
   if (!emails.length) return;
-  openModal(modalShell('Remove students', `<p class="text-sm text-[var(--ink-soft)]">Remove ${emails.length} selected student(s) from this course?</p>`, 'Remove all', 'bg-[var(--bad)] hover:opacity-90'));
+  openModal(modalShell('Remove students', `<p class="text-sm text-[var(--ink-soft)]">Remove ${emails.length} selected student(s) from this course?</p>`, 'Remove all', 'btn-tint-bad'));
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
     setButtonLoading(btn, 'Removing…');
@@ -1668,7 +1791,7 @@ function confirmBulkRemoveStudents() {
 function confirmBulkCourseOp(action, label, verb) {
   const ids = Array.from(state.selectedCourseIds);
   if (!ids.length) return;
-  openModal(modalShell(`${verb} classrooms`, `<p class="text-sm text-[var(--ink-soft)]">${verb} ${ids.length} selected classroom(s)?</p>`, label, action === 'bulkDeleteCourses' ? 'bg-[var(--bad)] hover:opacity-90' : (action === 'bulkArchiveCourses' ? 'bg-[var(--warn)] hover:opacity-90' : 'btn-primary')));
+  openModal(modalShell(`${verb} classrooms`, `<p class="text-sm text-[var(--ink-soft)]">${verb} ${ids.length} selected classroom(s)?</p>`, label, action === 'bulkDeleteCourses' ? 'btn-tint-bad' : (action === 'bulkArchiveCourses' ? 'btn-tint-warn' : 'btn-primary')));
   wireModalButtons(async () => {
     const btn = document.getElementById('modal-submit');
     setButtonLoading(btn, 'Working…');
@@ -1748,8 +1871,8 @@ function renderMappingsList() {
     <li class="px-3 py-2.5 flex items-center gap-2 text-sm">
       <span class="font-medium">${escapeHtml(m.label)}</span>
       <span class="text-xs text-[var(--ink-faint)] font-mono truncate flex-1">${escapeHtml(m.orgUnitPath)}</span>
-      <button class="mapping-edit-btn shrink-0 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring px-1.5" data-ou="${escapeHtml(m.orgUnitPath)}" title="Edit">Edit</button>
-      <button class="mapping-delete-btn shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-[var(--bad)] hover:bg-[var(--bad-tint)] transition focus-ring" data-ou="${escapeHtml(m.orgUnitPath)}" title="Delete">
+      <button class="mapping-edit-btn btn-chip btn-chip-accent shrink-0 focus-ring" data-ou="${escapeHtml(m.orgUnitPath)}" title="Edit">Edit</button>
+      <button class="mapping-delete-btn btn-icon-tint-bad shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition focus-ring" data-ou="${escapeHtml(m.orgUnitPath)}" title="Delete">
         <span class="w-3.5 h-3.5 block">${ICONS.trash}</span>
       </button>
     </li>`).join('');
@@ -1763,7 +1886,7 @@ function renderMappingsList() {
   list.querySelectorAll('.mapping-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
     const orgUnitPath = btn.dataset.ou;
     const m = state.ouMappings.find(x => x.orgUnitPath === orgUnitPath);
-    openModal(modalShell('Delete renamed class group', `<p class="text-sm text-[var(--ink-soft)]">Delete the renaming "<span class="font-medium">${escapeHtml(m ? m.label : orgUnitPath)}</span>"? The underlying OU is untouched — this only removes the friendly label.</p>`, 'Delete', 'bg-[var(--bad)] hover:opacity-90'));
+    openModal(modalShell('Delete renamed class group', `<p class="text-sm text-[var(--ink-soft)]">Delete the renaming "<span class="font-medium">${escapeHtml(m ? m.label : orgUnitPath)}</span>"? The underlying OU is untouched — this only removes the friendly label.</p>`, 'Delete', 'btn-tint-bad'));
     wireModalButtons(async () => {
       const modalBtn = document.getElementById('modal-submit');
       setButtonLoading(modalBtn, 'Deleting…');
@@ -1788,7 +1911,7 @@ function renderAppUsersList() {
     <li class="px-3 py-2.5 flex items-center gap-2 text-sm">
       <span class="font-mono text-xs flex-1 truncate">${escapeHtml(u.email)}</span>
       <span class="text-xs font-medium bg-[var(--accent-tint)] text-[var(--accent-ink)] rounded-full px-2 py-0.5">${escapeHtml(roleLabel[u.role] || u.role)}</span>
-      <button class="app-user-edit-btn shrink-0 text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring px-1.5" data-email="${escapeHtml(u.email)}" title="Edit">Edit</button>
+      <button class="app-user-edit-btn btn-chip btn-chip-accent shrink-0 focus-ring" data-email="${escapeHtml(u.email)}" title="Edit">Edit</button>
     </li>`).join('');
   list.querySelectorAll('.app-user-edit-btn').forEach(btn => btn.addEventListener('click', () => {
     const u = state.appUsers.find(x => x.email === btn.dataset.email);
@@ -1815,13 +1938,6 @@ function boot() {
   icon(document.getElementById('icon-badge-orphaned'), 'warn');
   icon(document.getElementById('icon-badge-teachers'), 'user');
   icon(document.getElementById('icon-badge-students'), 'users');
-  const greetEl = document.getElementById('summary-greeting');
-  if (greetEl && state.me) {
-    const hour = new Date().getHours();
-    const part = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-    const name = (state.me.email.split('@')[0] || '').replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    greetEl.textContent = `${part}, ${name || 'there'}!`;
-  }
   icon(document.getElementById('rail-icon-roster'), 'users');
   icon(document.getElementById('rail-icon-classrooms'), 'book');
   icon(document.getElementById('rail-icon-settings'), 'gear');
@@ -1872,19 +1988,74 @@ function boot() {
   document.getElementById('btn-clear-selection').addEventListener('click', () => { state.selectedUserIds.clear(); renderUserTable(); updateSelectionBar(); });
   document.getElementById('btn-enroll-selected').addEventListener('click', () => {
     openModal(modalShell('Enroll selected students', `
-      <p class="text-sm text-[var(--ink-soft)] mb-3">${state.selectedUserIds.size} student(s) selected. Enter the destination course ID.</p>
-      <input id="bulk-course-id-input" type="text" placeholder="e.g. 123456789012" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
-    `, 'Enroll all', 'bg-[var(--good)] hover:opacity-90'));
+      <p class="text-sm text-[var(--ink-soft)] mb-3">${state.selectedUserIds.size} student(s) selected. Search for the destination classroom by name or primary teacher.</p>
+      <div class="relative">
+        <input id="bulk-course-search" type="text" autocomplete="off" placeholder="Class name, section, or teacher email…" class="w-full border border-[var(--line)] rounded-lg px-3 py-2 text-sm focus-ring">
+        <div id="bulk-course-suggestions" class="hidden absolute left-0 right-0 z-10 mt-1 bg-[var(--panel)] border border-[var(--line)] rounded-lg shadow-lg max-h-56 overflow-y-auto"></div>
+      </div>
+      <div id="bulk-course-selected" class="hidden mt-3 flex items-center justify-between gap-2 bg-[var(--accent-tint)] border border-[#bfe6cf] rounded-lg px-3 py-2">
+        <div class="min-w-0">
+          <p class="text-sm font-medium truncate" id="bulk-course-selected-name">—</p>
+          <p class="text-xs text-[var(--ink-faint)] truncate" id="bulk-course-selected-meta">—</p>
+        </div>
+        <button type="button" id="bulk-course-clear" class="text-xs font-medium text-[var(--accent-ink)] hover:opacity-70 focus-ring shrink-0">Change</button>
+      </div>
+    `, 'Enroll all', 'btn-tint-good'));
+
+    let selectedCourseId = '';
+    const searchInput = document.getElementById('bulk-course-search');
+    const suggestBox = document.getElementById('bulk-course-suggestions');
+    const selectedBox = document.getElementById('bulk-course-selected');
+    const selectedNameEl = document.getElementById('bulk-course-selected-name');
+    const selectedMetaEl = document.getElementById('bulk-course-selected-meta');
+
+    function renderCourseSuggestions() {
+      const q = searchInput.value.trim().toLowerCase();
+      if (!q) { suggestBox.classList.add('hidden'); suggestBox.innerHTML = ''; return; }
+      const matches = state.courses.filter(c =>
+        getCourseName(c).toLowerCase().includes(q) ||
+        getCourseSection(c).toLowerCase().includes(q) ||
+        (c.ownerEmail || '').toLowerCase().includes(q)
+      ).slice(0, 20);
+      if (!matches.length) {
+        suggestBox.innerHTML = `<div class="px-3 py-2 text-sm text-[var(--ink-faint)]">No classrooms match that name or teacher.</div>`;
+        suggestBox.classList.remove('hidden');
+        return;
+      }
+      suggestBox.innerHTML = matches.map(c => `
+        <div class="bulk-course-suggestion px-3 py-2 text-sm hover:bg-[var(--panel-2)] cursor-pointer" data-id="${escapeHtml(getCourseId(c))}">
+          <p class="font-medium truncate">${escapeHtml(getCourseName(c))}</p>
+          <p class="text-xs text-[var(--ink-faint)] truncate">${escapeHtml(getCourseSection(c) || getCourseId(c))}${c.ownerEmail ? ' · ' + escapeHtml(c.ownerEmail) : ''}</p>
+        </div>`).join('');
+      suggestBox.classList.remove('hidden');
+      suggestBox.querySelectorAll('.bulk-course-suggestion').forEach(row => row.addEventListener('click', () => {
+        const c = state.courses.find(x => getCourseId(x) === row.dataset.id);
+        if (!c) return;
+        selectedCourseId = getCourseId(c);
+        selectedNameEl.textContent = getCourseName(c);
+        selectedMetaEl.textContent = `${getCourseSection(c) || getCourseId(c)}${c.ownerEmail ? ' · ' + c.ownerEmail : ''}`;
+        selectedBox.classList.remove('hidden');
+        searchInput.value = '';
+        suggestBox.classList.add('hidden'); suggestBox.innerHTML = '';
+      }));
+    }
+    searchInput.addEventListener('input', renderCourseSuggestions);
+    document.getElementById('bulk-course-clear').addEventListener('click', () => {
+      selectedCourseId = '';
+      selectedBox.classList.add('hidden');
+      searchInput.value = '';
+      searchInput.focus();
+    });
+
     wireModalButtons(async () => {
-      const courseId = document.getElementById('bulk-course-id-input').value.trim();
-      if (!courseId) return;
+      if (!selectedCourseId) { showToast('Search for and select a classroom first.', 'error'); return; }
       const btn = document.getElementById('modal-submit');
       setButtonLoading(btn, 'Enrolling…');
       try {
-        const data = await apiPost({ action: 'bulkAddStudents', courseId, studentEmails: Array.from(state.selectedUserIds) });
+        const data = await apiPost({ action: 'bulkAddStudents', courseId: selectedCourseId, studentEmails: Array.from(state.selectedUserIds) });
         const r = data.results;
         closeModal();
-        if (!r.failed.length) showToast(`Enrolled ${r.ok.length} student(s) in course ${courseId}.`, 'success');
+        if (!r.failed.length) showToast(`Enrolled ${r.ok.length} student(s) in ${selectedNameEl.textContent}.`, 'success');
         else showToast(`Enrolled ${r.ok.length}; ${r.failed.length} failed.`, 'error');
       } catch (err) {
         showToast(err.message || 'Failed to enroll students', 'error');
