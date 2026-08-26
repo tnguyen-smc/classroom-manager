@@ -1414,7 +1414,14 @@ function confirmSingleCourseOp(courseId, action, title, body, submitLabel, submi
         const newState = action === 'archiveCourse' ? 'ARCHIVED' : 'ACTIVE';
         state.courses = state.courses.map(c => getCourseId(c) === courseId ? Object.assign({}, c, { courseState: newState }) : c);
       }
-      renderCourses();
+      // renderCourses() alone re-renders the drawer from the stale,
+      // already-computed state.filteredCourses — it doesn't know
+      // state.courses changed. applyCourseFilter() is what re-derives
+      // filteredCourses (view tab + search + sort) from state.courses, so
+      // an archived/unarchived/deleted course actually moves between tabs
+      // (e.g. Active -> Archived) immediately instead of sitting in its
+      // old tab until the next full reload.
+      applyCourseFilter();
       loadOrgStats();
     } catch (err) {
       showToast(err.message || `${title} failed`, 'error');
@@ -1923,7 +1930,11 @@ function confirmBulkCourseOp(action, label, verb) {
         const newState = action === 'bulkArchiveCourses' ? 'ARCHIVED' : 'ACTIVE';
         state.courses = state.courses.map(c => okIds.has(getCourseId(c)) ? Object.assign({}, c, { courseState: newState }) : c);
       }
-      renderCourses();
+      // See the comment in confirmSingleCourseOp — applyCourseFilter()
+      // (not renderCourses()) is what actually re-derives the filtered/
+      // sorted list from the patched state.courses, so archived/deleted
+      // courses move to the right tab immediately.
+      applyCourseFilter();
       loadOrgStats();
     } catch (err) {
       showToast(err.message || `${verb} failed`, 'error');
